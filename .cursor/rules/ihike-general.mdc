@@ -1,0 +1,23 @@
+---
+alwaysApply: true
+---
+Tech Stack: 
+Frontend: Vite + React → UI and component logic, Tailwind CSS → styling, Mapbox GL JS → interactive map rendering
+Backend: Django (Python) → web framework and API, Django REST Framework → REST API endpoints, PostgreSQL + PostGIS → relational + geospatial database
+Deployment: AWS Elastic Beanstalk → backend hosting, Vercel → frontend hosting
+
+General (Always Follow): 
+Keep code efficient, simple, and easy to follow.
+Do not over-engineer — build only what’s needed, keep solutions minimal and practical.
+Use React functional components + hooks only (no class components).
+Use only these hooks unless necessary: useState, useEffect, useRef.
+Keep components small and modular.
+Write reusable code when appropriate (e.g., shared components, helper functions, hooks) to avoid duplication.
+Use Tailwind for all styling. No inline CSS or external frameworks.
+Use camelCase for variables and file names.
+Keep folder structure clean and consistent.
+Write code that is self-explanatory and minimal.
+No redundant abstractions or unnecessary logic.
+Code should run without extra setup beyond this stack.
+Comment only when logic isn’t immediately clear.
+You are not able to see or modify .env files directly - so tell the user what they should add to the files if needed.
