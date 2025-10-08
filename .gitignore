@@ -75,3 +75,13 @@ backend/.venv.clean/
 
 # Vercel project metadata
 .vercel/
+
+# --- AWS Elastic Beanstalk (backend) ---
+.elasticbeanstalk/*
+!.elasticbeanstalk/*.cfg.yml
+!.elasticbeanstalk/*.global.yml
+.elasticbeanstalk/
+.ebextensions/
+.platform/
+.ebignore
+backend/staticfiles/
