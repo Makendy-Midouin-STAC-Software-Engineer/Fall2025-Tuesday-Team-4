@@ -1,0 +1,77 @@
+﻿# --- Python / Django ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.eggs/
+.Python
+*.log
+pip-log.txt
+pip-delete-this-directory.txt
+.coverage
+htmlcov/
+.tox/
+.nox/
+pytest_cache/
+.mypy_cache/
+.pytest_cache/
+.pyre/
+.pytype/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+backend/.venv/
+
+# Django specific
+media/
+staticfiles/
+static/
+*.sqlite3
+local_settings.py
+
+# --- Node / Vite / React ---
+node_modules/
+dist/
+.vite/
+*.local
+*.tsbuildinfo
+
+# --- Environment & secrets ---
+.env
+.env.*
+!.env.example
+!.env.sample
+backend/.env
+frontend/.env
+
+# --- OS / Editor / Tooling ---
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# --- Mapbox tokens or local config ---
+mapbox_token*
+
+# --- Cursor / Editor-specific ---
+.cursor/
+
+# --- Build artifacts ---
+coverage/
+build/
+
+# Additional virtualenv patterns
+**/.venv*/
+backend/.venv.clean/
+# Additional virtualenv directories
+backend/.venv.clean/
+
+# Vercel project metadata
+.vercel/
