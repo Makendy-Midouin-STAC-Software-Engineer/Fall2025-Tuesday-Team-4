@@ -71,6 +71,7 @@ class Command(BaseCommand):
     help = (
         "Import GeoJSON into Trail and Path models. Usage:"
         " python manage.py import_geojson hiking_route.geojson hiking_ways.geojson"
+        " [--update-existing]"
     )
 
     def add_arguments(self, parser):
@@ -79,25 +80,38 @@ class Command(BaseCommand):
             nargs="+",
             help="GeoJSON files. hiking_route.geojson -> Trail, hiking_ways.geojson -> Path",
         )
+        parser.add_argument(
+            "--update-existing",
+            action="store_true",
+            help=(
+                "Update existing rows (match by osm_id): set sac_scale/difficulty, backfill length, "
+                "and optionally website/route/highway if missing; otherwise skip duplicates"
+            ),
+        )
 
     def handle(self, *args, **options):
         files: List[str] = options["files"]
+        update_existing: bool = bool(options.get("update_existing"))
         if not files:
             raise CommandError("Provide at least one GeoJSON file")
 
-        trails_count = 0
-        paths_count = 0
+        trails_created = 0
+        trails_updated = 0
+        paths_created = 0
+        paths_updated = 0
         skipped = 0
 
         for file_path in files:
             lower = file_path.lower()
             if "route" in lower:
-                created, skipped_file = self._import_trails(file_path)
-                trails_count += created
+                created, updated, skipped_file = self._import_trails(file_path, update_existing)
+                trails_created += created
+                trails_updated += updated
                 skipped += skipped_file
             elif "ways" in lower or "path" in lower:
-                created, skipped_file = self._import_paths(file_path)
-                paths_count += created
+                created, updated, skipped_file = self._import_paths(file_path, update_existing)
+                paths_created += created
+                paths_updated += updated
                 skipped += skipped_file
             else:
                 self.stdout.write(self.style.WARNING(
@@ -105,12 +119,17 @@ class Command(BaseCommand):
                 ))
 
         self.stdout.write(self.style.SUCCESS(
-            f"Imported Trails: {trails_count}, Paths: {paths_count}, Skipped duplicates: {skipped}"
+            (
+                f"Imported Trails: {trails_created} (updated {trails_updated}), "
+                f"Paths: {paths_created} (updated {paths_updated}), "
+                f"Skipped duplicates: {skipped}"
+            )
         ))
 
     @transaction.atomic
-    def _import_trails(self, file_path: str) -> Tuple[int, int]:
+    def _import_trails(self, file_path: str, update_existing: bool) -> Tuple[int, int, int]:
         created_count = 0
+        updated_count = 0
         skipped_dupes = 0
         for feature in parse_geojson(file_path):
             props: Dict[str, Any] = feature.get("properties") or {}
@@ -125,7 +144,7 @@ class Command(BaseCommand):
 
             osm_id_raw = props.get("osm_id")
             try:
-                osm_id = int(osm_id_raw) if osm_id_raw is not None else None
+                osm_id = int(osm_id_raw) if osm_id_raw not in (None, "", "null") else None
             except ValueError:
                 osm_id = None
 
@@ -143,21 +162,51 @@ class Command(BaseCommand):
             if osm_id is not None:
                 existing = Trail.objects.filter(osm_id=osm_id).first()
                 if existing:
-                    # If existing record has missing/zero length, backfill using DB geodesic length (km)
-                    if (existing.length is None) or (existing.length <= 0):
-                        length_km = ExpressionWrapper(
-                            GeomLength("geometry", spheroid=True) / Value(1000.0),
-                            output_field=FloatField(),
-                        )
-                        Trail.objects.filter(pk=existing.pk).update(length=length_km)
-                    skipped_dupes += 1
+                    if update_existing:
+                        updates: Dict[str, Any] = {}
+                        new_sac = (props.get("sac_scale") or None)
+                        if new_sac != existing.sac_scale:
+                            updates["sac_scale"] = new_sac
+                            updates["difficulty"] = map_sac_scale_to_difficulty(new_sac)
+                        # Backfill length if missing/zero
+                        if (existing.length is None) or (existing.length <= 0):
+                            if length_value is not None:
+                                updates["length"] = float(length_value)
+                            else:
+                                length_km = ExpressionWrapper(
+                                    GeomLength("geometry", spheroid=True) / Value(1000.0),
+                                    output_field=FloatField(),
+                                )
+                                updates["length"] = length_km
+                        # Optional: fill website/route if missing
+                        new_website = (props.get("website") or "").strip()
+                        if new_website and not existing.website:
+                            updates["website"] = new_website
+                        new_route = (props.get("route") or "").strip()
+                        if new_route and not existing.route:
+                            updates["route"] = new_route
+                        if updates:
+                            Trail.objects.filter(pk=existing.pk).update(**updates)
+                            updated_count += 1
+                        else:
+                            skipped_dupes += 1
+                    else:
+                        # If existing record has missing/zero length, backfill using DB geodesic length (km)
+                        if (existing.length is None) or (existing.length <= 0):
+                            length_km = ExpressionWrapper(
+                                GeomLength("geometry", spheroid=True) / Value(1000.0),
+                                output_field=FloatField(),
+                            )
+                            Trail.objects.filter(pk=existing.pk).update(length=length_km)
+                        skipped_dupes += 1
                     continue
 
             trail = Trail(
-                osm_id=osm_id or 0,
+                osm_id=osm_id,
                 name=(props.get("name") or "Unnamed Trail"),
                 route=(props.get("route") or "hiking"),
                 difficulty=map_sac_scale_to_difficulty(props.get("sac_scale")),
+                sac_scale=(props.get("sac_scale") or None),
                 length=float(length_value or 0.0),
                 website=(props.get("website") or ""),
                 geometry=ml,
@@ -171,11 +220,12 @@ class Command(BaseCommand):
                 )
                 Trail.objects.filter(pk=trail.pk).update(length=length_km)
             created_count += 1
-        return created_count, skipped_dupes
+        return created_count, updated_count, skipped_dupes
 
     @transaction.atomic
-    def _import_paths(self, file_path: str) -> Tuple[int, int]:
+    def _import_paths(self, file_path: str, update_existing: bool) -> Tuple[int, int, int]:
         created_count = 0
+        updated_count = 0
         skipped_dupes = 0
         for feature in parse_geojson(file_path):
             props: Dict[str, Any] = feature.get("properties") or {}
@@ -190,7 +240,7 @@ class Command(BaseCommand):
 
             osm_id_raw = props.get("osm_id")
             try:
-                osm_id = int(osm_id_raw) if osm_id_raw is not None else None
+                osm_id = int(osm_id_raw) if osm_id_raw not in (None, "", "null") else None
             except ValueError:
                 osm_id = None
 
@@ -208,20 +258,48 @@ class Command(BaseCommand):
             if osm_id is not None:
                 existing = Path.objects.filter(osm_id=osm_id).first()
                 if existing:
-                    if (existing.length is None) or (existing.length <= 0):
-                        length_km = ExpressionWrapper(
-                            GeomLength("geometry", spheroid=True) / Value(1000.0),
-                            output_field=FloatField(),
-                        )
-                        Path.objects.filter(pk=existing.pk).update(length=length_km)
-                    skipped_dupes += 1
+                    if update_existing:
+                        updates: Dict[str, Any] = {}
+                        new_sac = (props.get("sac_scale") or None)
+                        if new_sac != existing.sac_scale:
+                            updates["sac_scale"] = new_sac
+                            updates["difficulty"] = map_sac_scale_to_difficulty(new_sac)
+                        if (existing.length is None) or (existing.length <= 0):
+                            if length_value is not None:
+                                updates["length"] = float(length_value)
+                            else:
+                                length_km = ExpressionWrapper(
+                                    GeomLength("geometry", spheroid=True) / Value(1000.0),
+                                    output_field=FloatField(),
+                                )
+                                updates["length"] = length_km
+                        new_website = (props.get("website") or "").strip()
+                        if new_website and not existing.website:
+                            updates["website"] = new_website
+                        new_highway = (props.get("highway") or "").strip()
+                        if new_highway and not existing.highway:
+                            updates["highway"] = new_highway
+                        if updates:
+                            Path.objects.filter(pk=existing.pk).update(**updates)
+                            updated_count += 1
+                        else:
+                            skipped_dupes += 1
+                    else:
+                        if (existing.length is None) or (existing.length <= 0):
+                            length_km = ExpressionWrapper(
+                                GeomLength("geometry", spheroid=True) / Value(1000.0),
+                                output_field=FloatField(),
+                            )
+                            Path.objects.filter(pk=existing.pk).update(length=length_km)
+                        skipped_dupes += 1
                     continue
 
             path = Path(
-                osm_id=osm_id or 0,
+                osm_id=osm_id,
                 name=(props.get("name") or "Unnamed Path"),
                 highway=(props.get("highway") or "path"),
                 difficulty=map_sac_scale_to_difficulty(props.get("sac_scale")),
+                sac_scale=(props.get("sac_scale") or None),
                 length=float(length_value or 0.0),
                 website=(props.get("website") or ""),
                 geometry=ml,
@@ -234,6 +312,6 @@ class Command(BaseCommand):
                 )
                 Path.objects.filter(pk=path.pk).update(length=length_km)
             created_count += 1
-        return created_count, skipped_dupes
+        return created_count, updated_count, skipped_dupes
 
 

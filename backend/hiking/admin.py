@@ -21,6 +21,6 @@ class TrailAdmin(BaseGeoAdmin):
 class PathAdmin(BaseGeoAdmin):
     list_display = ("name", "highway", "length", "difficulty")
     search_fields = ("name", "highway")
-    list_filter = ("highway",)
+    list_filter = ("highway", "difficulty")
 
 # Register your models here.

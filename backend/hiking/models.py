@@ -2,10 +2,11 @@ from django.contrib.gis.db import models
 
 
 class Trail(models.Model):
-    osm_id = models.BigIntegerField()
+    osm_id = models.BigIntegerField(null=True, blank=True, unique=True, db_index=True)
     name = models.CharField(max_length=255)
     route = models.CharField(max_length=100)
     difficulty = models.CharField(max_length=50)
+    sac_scale = models.CharField(max_length=100, null=True, blank=True)
     length = models.FloatField()
     website = models.URLField(blank=True)
     geometry = models.MultiLineStringField(srid=4326)
@@ -18,10 +19,11 @@ class Trail(models.Model):
 
 
 class Path(models.Model):
-    osm_id = models.BigIntegerField()
+    osm_id = models.BigIntegerField(null=True, blank=True, unique=True, db_index=True)
     name = models.CharField(max_length=255)
     highway = models.CharField(max_length=100)
     difficulty = models.CharField(max_length=50)
+    sac_scale = models.CharField(max_length=100, null=True, blank=True)
     length = models.FloatField()
     website = models.URLField(blank=True)
     geometry = models.MultiLineStringField(srid=4326)

@@ -37,7 +37,7 @@ DEBUG = os.getenv("DEBUG", "False").lower() in ("1", "true", "yes", "on")
 ALLOWED_HOSTS = [
     h.strip() for h in os.getenv(
         "ALLOWED_HOSTS",
-        ".elasticbeanstalk.com,localhost,127.0.0.1,.ngrok-free.app",
+        ".elasticbeanstalk.com,localhost,127.0.0.1",
     ).split(",") if h.strip()
 ]
 
@@ -53,11 +53,14 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'django.contrib.gis',
     'rest_framework',
+    'django_filters',
+    'corsheaders',
     'hiking',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -213,3 +216,27 @@ if GDAL_LIBRARY_PATH and os.path.exists(GDAL_LIBRARY_PATH):
     ctypes.CDLL(GDAL_LIBRARY_PATH)
 if GEOS_LIBRARY_PATH and os.path.exists(GEOS_LIBRARY_PATH):
     ctypes.CDLL(GEOS_LIBRARY_PATH)
+
+# REST framework
+REST_FRAMEWORK = {
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.AllowAny',
+    ],
+    'DEFAULT_FILTER_BACKENDS': [
+        'django_filters.rest_framework.DjangoFilterBackend',
+        'rest_framework_gis.filters.InBBoxFilter',
+        'rest_framework.filters.OrderingFilter',
+    ],
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': int(os.getenv('API_PAGE_SIZE', '200')),
+}
+
+# CORS
+CORS_ALLOWED_ORIGINS = [
+    *[o.strip() for o in os.getenv('CORS_ALLOWED_ORIGINS', '').split(',') if o.strip()],
+]
+CORS_ALLOW_CREDENTIALS = os.getenv('CORS_ALLOW_CREDENTIALS', 'false').lower() in ('1', 'true', 'yes', 'on')
+
+# If no specific origins are set, allow all in development when DEBUG is true
+if DEBUG and not CORS_ALLOWED_ORIGINS:
+    CORS_ALLOW_ALL_ORIGINS = True
