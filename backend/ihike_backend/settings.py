@@ -37,7 +37,7 @@ DEBUG = os.getenv("DEBUG", "False").lower() in ("1", "true", "yes", "on")
 ALLOWED_HOSTS = [
     h.strip() for h in os.getenv(
         "ALLOWED_HOSTS",
-        ".elasticbeanstalk.com,localhost,127.0.0.1",
+        "ihike-api-dev.eba-dpt4em9m.us-east-1.elasticbeanstalk.com,localhost,127.0.0.1",
     ).split(",") if h.strip()
 ]
 
@@ -188,14 +188,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 GDAL_LIBRARY_PATH = os.getenv("GDAL_LIBRARY_PATH")
 GEOS_LIBRARY_PATH = os.getenv("GEOS_LIBRARY_PATH")
 
-# On Linux (Elastic Beanstalk), ignore any Windows-specific GDAL/GEOS env vars
-if os.name != 'nt':
-    for _var in ("GDAL_LIBRARY_PATH", "GEOS_LIBRARY_PATH", "GDAL_BIN_DIR", "OSGEO4W_ROOT"):
-        if os.environ.get(_var):
-            os.environ.pop(_var, None)
-    GDAL_LIBRARY_PATH = None
-    GEOS_LIBRARY_PATH = None
-else:
+if os.name == 'nt':
     # Help Windows find the DLLs by adding the bin directory to the DLL search path
     _gdal_bin_dir = os.getenv("GDAL_BIN_DIR")
     _osgeo_root = os.getenv("OSGEO4W_ROOT")
@@ -209,13 +202,64 @@ else:
     except (AttributeError, FileNotFoundError, OSError):
         # os.add_dll_directory is available on Python 3.8+; ignore if unavailable
         pass
+else:
+    # Linux: allow env vars to be honored and attempt auto-detection when not provided
+    import ctypes, ctypes.util, importlib.util, sys
+    _gdal_path = GDAL_LIBRARY_PATH
+    if not _gdal_path:
+        _gdal_found = ctypes.util.find_library("gdal")
+        if _gdal_found:
+            _gdal_path = _gdal_found
+    # Try to load from GDAL wheel if installed
+    if not _gdal_path:
+        try:
+            # Common location inside GDAL wheel
+            import os as _os
+            _candidate_paths = [
+                _os.path.join(_p, 'osgeo', 'gdal.so') for _p in sys.path
+            ]
+            for _cand in _candidate_paths:
+                if _os.path.exists(_cand):
+                    _gdal_path = _cand
+                    break
+        except Exception:
+            pass
+    if _gdal_path:
+        try:
+            ctypes.CDLL(_gdal_path)
+            # Expose to Django's GDAL loader if env var wasn't set
+            if not GDAL_LIBRARY_PATH:
+                GDAL_LIBRARY_PATH = _gdal_path
+        except OSError:
+            pass
 
-import ctypes
+import ctypes, ctypes.util
 
-if GDAL_LIBRARY_PATH and os.path.exists(GDAL_LIBRARY_PATH):
-    ctypes.CDLL(GDAL_LIBRARY_PATH)
-if GEOS_LIBRARY_PATH and os.path.exists(GEOS_LIBRARY_PATH):
-    ctypes.CDLL(GEOS_LIBRARY_PATH)
+# Resolve GEOS path on Linux if not explicitly provided
+_geos_path = GEOS_LIBRARY_PATH if GEOS_LIBRARY_PATH and os.path.exists(GEOS_LIBRARY_PATH) else None
+if not _geos_path:
+    _geos_found = ctypes.util.find_library("geos_c")
+    if _geos_found:
+        _geos_path = _geos_found
+if not _geos_path:
+    # Try to resolve GEOS from Shapely wheel as a last resort
+    try:
+        import shapely
+        _pkg_dir = os.path.dirname(shapely.__file__)
+        for _name in ("libgeos_c.so", "libgeos_c.so.1"):
+            _cand = os.path.join(_pkg_dir, _name)
+            if os.path.exists(_cand):
+                _geos_path = _cand
+                break
+    except Exception:
+        pass
+if _geos_path:
+    try:
+        ctypes.CDLL(_geos_path)
+        if not GEOS_LIBRARY_PATH:
+            GEOS_LIBRARY_PATH = _geos_path
+    except OSError:
+        pass
 
 # REST framework
 REST_FRAMEWORK = {
