@@ -80,8 +80,8 @@ backend/.venv.clean/
 .elasticbeanstalk/*
 !.elasticbeanstalk/*.cfg.yml
 !.elasticbeanstalk/*.global.yml
-.elasticbeanstalk/
 .ebextensions/
 .platform/
 .ebignore
 backend/staticfiles/
+*.zip

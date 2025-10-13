@@ -99,4 +99,3 @@ class PathViewSet(viewsets.ReadOnlyModelViewSet):
 - GeoJSON feature output uses SRID 4326 (WGS84) suitable for Mapbox.
 - Properties are snake_case (`osm_id`, `sac_scale` not currently present, `difficulty` is mapped value). Confirm UI expects snake_case; if camelCase is preferred, transform at the client edge.
 
-
