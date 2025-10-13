@@ -16,14 +16,20 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.http import JsonResponse
 from rest_framework.routers import DefaultRouter
 from hiking.views import TrailViewSet, PathViewSet
+
+def health(_request):
+    return JsonResponse({"status": "ok"})
 
 router = DefaultRouter()
 router.register(r'trails', TrailViewSet, basename='trail')
 router.register(r'paths', PathViewSet, basename='path')
 
 urlpatterns = [
+    path('', health, name='root-health'),
+    path('health/', health, name='health'),
     path('admin/', admin.site.urls),
     path('api/', include(router.urls)),
 ]

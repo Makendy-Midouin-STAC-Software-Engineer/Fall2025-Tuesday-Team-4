@@ -1,9 +1,10 @@
 import json
 from typing import Any, Dict, Iterable, List, Optional, Tuple
+from decimal import Decimal
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
-from django.db.models import FloatField, Value
+from django.db.models import DecimalField, Value
 from django.db.models.expressions import ExpressionWrapper
 from django.contrib.gis.db.models.functions import Length as GeomLength
 from django.contrib.gis.geos import GEOSGeometry, MultiLineString, LineString
@@ -65,6 +66,14 @@ def parse_geojson(path: str) -> Iterable[Dict[str, Any]]:
         yield data
     else:
         raise CommandError("Input file must be a FeatureCollection or Feature GeoJSON")
+
+
+def geodesic_km_expr() -> ExpressionWrapper:
+    """Database expression: geodesic length of geometry in kilometers as Decimal(9,3)."""
+    return ExpressionWrapper(
+        GeomLength("geometry", spheroid=True) / Value(1000.0),
+        output_field=DecimalField(max_digits=9, decimal_places=3),
+    )
 
 
 class Command(BaseCommand):
@@ -148,15 +157,15 @@ class Command(BaseCommand):
             except ValueError:
                 osm_id = None
 
-            # Parse provided length if present; treat null/empty/zero as missing
+            # Parse provided length (km). Treat null/empty/zero as missing. Use Decimal for precision.
             length_raw = props.get("length")
-            length_value: Optional[float] = None
+            length_value: Optional[Decimal] = None
             try:
                 if length_raw not in (None, "", "null"):
-                    parsed = float(length_raw)
-                    if parsed > 0:
-                        length_value = parsed
-            except (TypeError, ValueError):
+                    candidate = Decimal(str(length_raw))
+                    if candidate > 0:
+                        length_value = candidate
+            except Exception:
                 length_value = None
 
             if osm_id is not None:
@@ -171,13 +180,9 @@ class Command(BaseCommand):
                         # Backfill length if missing/zero
                         if (existing.length is None) or (existing.length <= 0):
                             if length_value is not None:
-                                updates["length"] = float(length_value)
+                                updates["length"] = length_value
                             else:
-                                length_km = ExpressionWrapper(
-                                    GeomLength("geometry", spheroid=True) / Value(1000.0),
-                                    output_field=FloatField(),
-                                )
-                                updates["length"] = length_km
+                                updates["length"] = geodesic_km_expr()
                         # Optional: fill website/route if missing
                         new_website = (props.get("website") or "").strip()
                         if new_website and not existing.website:
@@ -207,18 +212,14 @@ class Command(BaseCommand):
                 route=(props.get("route") or "hiking"),
                 difficulty=map_sac_scale_to_difficulty(props.get("sac_scale")),
                 sac_scale=(props.get("sac_scale") or None),
-                length=float(length_value or 0.0),
+                length=(length_value if length_value is not None else Decimal("0.000")),
                 website=(props.get("website") or ""),
                 geometry=ml,
             )
             trail.save()
             # If no valid length provided, compute geodesic length in km via PostGIS
             if length_value is None:
-                length_km = ExpressionWrapper(
-                    GeomLength("geometry", spheroid=True) / Value(1000.0),
-                    output_field=FloatField(),
-                )
-                Trail.objects.filter(pk=trail.pk).update(length=length_km)
+                Trail.objects.filter(pk=trail.pk).update(length=geodesic_km_expr())
             created_count += 1
         return created_count, updated_count, skipped_dupes
 
@@ -244,15 +245,15 @@ class Command(BaseCommand):
             except ValueError:
                 osm_id = None
 
-            # Parse provided length if present; treat null/empty/zero as missing
+            # Parse provided length (km) as Decimal; treat null/empty/zero as missing
             length_raw = props.get("length")
-            length_value: Optional[float] = None
+            length_value: Optional[Decimal] = None
             try:
                 if length_raw not in (None, "", "null"):
-                    parsed = float(length_raw)
-                    if parsed > 0:
-                        length_value = parsed
-            except (TypeError, ValueError):
+                    candidate = Decimal(str(length_raw))
+                    if candidate > 0:
+                        length_value = candidate
+            except Exception:
                 length_value = None
 
             if osm_id is not None:
@@ -266,13 +267,9 @@ class Command(BaseCommand):
                             updates["difficulty"] = map_sac_scale_to_difficulty(new_sac)
                         if (existing.length is None) or (existing.length <= 0):
                             if length_value is not None:
-                                updates["length"] = float(length_value)
+                                updates["length"] = length_value
                             else:
-                                length_km = ExpressionWrapper(
-                                    GeomLength("geometry", spheroid=True) / Value(1000.0),
-                                    output_field=FloatField(),
-                                )
-                                updates["length"] = length_km
+                                updates["length"] = geodesic_km_expr()
                         new_website = (props.get("website") or "").strip()
                         if new_website and not existing.website:
                             updates["website"] = new_website
@@ -300,17 +297,13 @@ class Command(BaseCommand):
                 highway=(props.get("highway") or "path"),
                 difficulty=map_sac_scale_to_difficulty(props.get("sac_scale")),
                 sac_scale=(props.get("sac_scale") or None),
-                length=float(length_value or 0.0),
+                length=(length_value if length_value is not None else Decimal("0.000")),
                 website=(props.get("website") or ""),
                 geometry=ml,
             )
             path.save()
             if length_value is None:
-                length_km = ExpressionWrapper(
-                    GeomLength("geometry", spheroid=True) / Value(1000.0),
-                    output_field=FloatField(),
-                )
-                Path.objects.filter(pk=path.pk).update(length=length_km)
+                Path.objects.filter(pk=path.pk).update(length=geodesic_km_expr())
             created_count += 1
         return created_count, updated_count, skipped_dupes
 

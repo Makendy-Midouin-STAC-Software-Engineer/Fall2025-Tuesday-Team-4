@@ -60,6 +60,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -114,6 +115,10 @@ if _db_parsed:
         'django.db.backends.postgresql_psycopg2',
     ):
         DATABASES['default']['ENGINE'] = 'django.contrib.gis.db.backends.postgis'
+    
+    # Don't force IPv4 resolution - let psycopg2 handle it naturally
+    # This is important for services like Supabase that use connection poolers
+    # which may require the hostname for SSL/TLS SNI
 elif _db_name:
     DATABASES = {
         'default': {
@@ -128,6 +133,7 @@ elif _db_name:
             }.items() if v},
         }
     }
+    # Don't force IPv4 - let the connection library handle it
 else:
     DATABASES = {
         'default': {
@@ -135,6 +141,13 @@ else:
             'NAME': BASE_DIR / 'db.sqlite3',
         }
     }
+
+
+# Database connection note:
+# We don't force IPv4 resolution anymore because:
+# 1. Supabase pooler requires hostname for SSL/TLS SNI
+# 2. Modern AWS instances handle IPv4/IPv6 automatically
+# 3. psycopg2 handles connection details correctly when given proper DATABASE_URL
 
 
 # Password validation
@@ -171,8 +184,12 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# WhiteNoise configuration for serving static files
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -185,80 +202,23 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # GEOS_LIBRARY_PATH=C:\\OSGeo4W\\bin\\geos_c.dll
 # Optionally, set GDAL_BIN_DIR or OSGEO4W_ROOT to help the loader find DLLs
 
-GDAL_LIBRARY_PATH = os.getenv("GDAL_LIBRARY_PATH")
-GEOS_LIBRARY_PATH = os.getenv("GEOS_LIBRARY_PATH")
+# GeoDjango Library Configuration
+# Point to system libraries or use Shapely's bundled GEOS as fallback
+GDAL_LIBRARY_PATH = os.getenv('GDAL_LIBRARY_PATH')
+GEOS_LIBRARY_PATH = os.getenv('GEOS_LIBRARY_PATH')
 
-if os.name == 'nt':
-    # Help Windows find the DLLs by adding the bin directory to the DLL search path
-    _gdal_bin_dir = os.getenv("GDAL_BIN_DIR")
-    _osgeo_root = os.getenv("OSGEO4W_ROOT")
-    try:
-        if _gdal_bin_dir and os.path.isdir(_gdal_bin_dir):
-            os.add_dll_directory(_gdal_bin_dir)
-        if _osgeo_root and os.path.isdir(_osgeo_root):
-            _bin = os.path.join(_osgeo_root, "bin")
-            if os.path.isdir(_bin):
-                os.add_dll_directory(_bin)
-    except (AttributeError, FileNotFoundError, OSError):
-        # os.add_dll_directory is available on Python 3.8+; ignore if unavailable
-        pass
-else:
-    # Linux: allow env vars to be honored and attempt auto-detection when not provided
-    import ctypes, ctypes.util, importlib.util, sys
-    _gdal_path = GDAL_LIBRARY_PATH
-    if not _gdal_path:
-        _gdal_found = ctypes.util.find_library("gdal")
-        if _gdal_found:
-            _gdal_path = _gdal_found
-    # Try to load from GDAL wheel if installed
-    if not _gdal_path:
-        try:
-            # Common location inside GDAL wheel
-            import os as _os
-            _candidate_paths = [
-                _os.path.join(_p, 'osgeo', 'gdal.so') for _p in sys.path
-            ]
-            for _cand in _candidate_paths:
-                if _os.path.exists(_cand):
-                    _gdal_path = _cand
-                    break
-        except Exception:
-            pass
-    if _gdal_path:
-        try:
-            ctypes.CDLL(_gdal_path)
-            # Expose to Django's GDAL loader if env var wasn't set
-            if not GDAL_LIBRARY_PATH:
-                GDAL_LIBRARY_PATH = _gdal_path
-        except OSError:
-            pass
-
-import ctypes, ctypes.util
-
-# Resolve GEOS path on Linux if not explicitly provided
-_geos_path = GEOS_LIBRARY_PATH if GEOS_LIBRARY_PATH and os.path.exists(GEOS_LIBRARY_PATH) else None
-if not _geos_path:
-    _geos_found = ctypes.util.find_library("geos_c")
-    if _geos_found:
-        _geos_path = _geos_found
-if not _geos_path:
-    # Try to resolve GEOS from Shapely wheel as a last resort
+# On Windows or if system libs not available, try Shapely's bundled GEOS
+if not GEOS_LIBRARY_PATH or not os.path.exists(str(GEOS_LIBRARY_PATH)):
     try:
         import shapely
-        _pkg_dir = os.path.dirname(shapely.__file__)
-        for _name in ("libgeos_c.so", "libgeos_c.so.1"):
-            _cand = os.path.join(_pkg_dir, _name)
-            if os.path.exists(_cand):
-                _geos_path = _cand
-                break
+        _shapely_dir = os.path.dirname(shapely.__file__)
+        _libs_dir = os.path.join(_shapely_dir, '.libs')
+        
+        if os.path.exists(_libs_dir):
+            _geos_files = [f for f in os.listdir(_libs_dir) if 'geos_c' in f]
+            if _geos_files:
+                GEOS_LIBRARY_PATH = os.path.join(_libs_dir, _geos_files[0])
     except Exception:
-        pass
-if _geos_path:
-    try:
-        ctypes.CDLL(_geos_path)
-        if not GEOS_LIBRARY_PATH:
-            GEOS_LIBRARY_PATH = _geos_path
-    except OSError:
         pass
 
 # REST framework
@@ -273,6 +233,7 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': int(os.getenv('API_PAGE_SIZE', '200')),
+    'COERCE_DECIMAL_TO_STRING': False,
 }
 
 # CORS
