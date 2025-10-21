@@ -102,7 +102,10 @@ export function MapView({ initialCenter = [-122.447303, 37.753574], initialZoom 
   const [terrainExaggeration, setTerrainExaggeration] = useState<number>(1)
   const [selectedTrailId, setSelectedTrailId] = useState<string | number | null>(null)
 
-  const API_BASE: string = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:8000'
+  const envBase = import.meta.env.VITE_API_BASE_URL as string | undefined
+  const API_BASE: string = import.meta.env.DEV
+    ? (envBase ?? 'http://localhost:8000')
+    : ''
 
   async function fetchViewportData(map: MapboxMap): Promise<void> {
     try {
