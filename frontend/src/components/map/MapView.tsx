@@ -114,9 +114,12 @@ export function MapView({ initialCenter = [-122.447303, 37.753574], initialZoom 
   const MIN_FETCH_ZOOM = import.meta.env.DEV ? 0 : 8
   const PAGE_SIZE = import.meta.env.DEV ? 5000 : 2000
   const MAX_PAGES = import.meta.env.DEV ? Number.POSITIVE_INFINITY : 3
+  const SHOULD_ABORT_REQUESTS = !import.meta.env.DEV
+  const DEBOUNCE_MS = import.meta.env.DEV ? 150 : 300
 
   // Abort previous in-flight requests when viewport changes rapidly
   const fetchAbortRef = useRef<AbortController | null>(null)
+  const loadTimerRef = useRef<number | null>(null)
 
   async function fetchViewportData(map: MapboxMap): Promise<void> {
     try {
@@ -129,14 +132,19 @@ export function MapView({ initialCenter = [-122.447303, 37.753574], initialZoom 
         return
       }
 
-      // Abort previous requests
-      try { fetchAbortRef.current?.abort() } catch {}
+      // Abort previous requests (disabled in dev to avoid noisy broken pipes)
+      if (SHOULD_ABORT_REQUESTS) {
+        try { fetchAbortRef.current?.abort() } catch {}
+      }
       const controller = new AbortController()
-      fetchAbortRef.current = controller
+      fetchAbortRef.current = SHOULD_ABORT_REQUESTS ? controller : null
 
       const routesUrl = `${API_BASE}/api/route/?${bboxParamFromMap(map)}&page_size=${PAGE_SIZE}`
       const waysUrl = `${API_BASE}/api/ways/?${bboxParamFromMap(map)}&page_size=${PAGE_SIZE}`
-      const common: RequestInit = { headers: { Accept: 'application/geo+json, application/json;q=0.9' }, signal: controller.signal }
+      const common: RequestInit = {
+        headers: { Accept: 'application/geo+json, application/json;q=0.9' },
+        signal: SHOULD_ABORT_REQUESTS ? controller.signal : undefined,
+      }
 
       function normalizeNext(nextUrl: string | null): string | null {
         if (!nextUrl) return null
@@ -238,6 +246,10 @@ export function MapView({ initialCenter = [-122.447303, 37.753574], initialZoom 
     }
 
     const loadDataForViewport = () => fetchViewportData(map)
+    const scheduleLoad = () => {
+      try { if (loadTimerRef.current != null) window.clearTimeout(loadTimerRef.current) } catch {}
+      loadTimerRef.current = window.setTimeout(() => { loadDataForViewport() }, DEBOUNCE_MS)
+    }
 
     map.on('load', () => {
       addTrailSources(map)
@@ -246,7 +258,7 @@ export function MapView({ initialCenter = [-122.447303, 37.753574], initialZoom 
       addHoverHighlight(map)
       ensureSelectionHighlightLayers(map)
       addClickPopup(map, API_BASE, (id) => setSelectedTrailId(id))
-      loadDataForViewport()
+      scheduleLoad()
       saveState()
     })
 
@@ -254,8 +266,8 @@ export function MapView({ initialCenter = [-122.447303, 37.753574], initialZoom 
     map.on('zoomend', saveState)
     map.on('rotateend', saveState)
     map.on('pitchend', saveState)
-    map.on('moveend', loadDataForViewport)
-    map.on('zoomend', loadDataForViewport)
+    map.on('moveend', scheduleLoad)
+    map.on('zoomend', scheduleLoad)
 
     map.on('error', (e) => {
       // eslint-disable-next-line no-console
@@ -264,6 +276,7 @@ export function MapView({ initialCenter = [-122.447303, 37.753574], initialZoom 
 
     return () => {
       try { cleanupResizeRef.current?.() } catch {}
+      try { if (loadTimerRef.current != null) window.clearTimeout(loadTimerRef.current) } catch {}
       map.remove()
       mapRef.current = null
     }
