@@ -1,9 +1,9 @@
-import mapboxgl from 'mapbox-gl'
+import type { Map } from 'mapbox-gl'
 
 export const ROUTES_SOURCE_ID = 'routes'
 export const WAYS_SOURCE_ID = 'ways'
 
-export function addTrailSources(map: mapboxgl.Map) {
+export function addTrailSources(map: Map) {
   if (!map.getSource(ROUTES_SOURCE_ID)) {
     map.addSource(ROUTES_SOURCE_ID, { type: 'geojson', data: { type: 'FeatureCollection', features: [] }, generateId: true } as any)
   }
