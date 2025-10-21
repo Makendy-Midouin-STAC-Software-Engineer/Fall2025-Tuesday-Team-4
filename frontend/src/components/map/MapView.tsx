@@ -110,9 +110,10 @@ export function MapView({ initialCenter = [-122.447303, 37.753574], initialZoom 
     : ''
 
   // Tuning knobs for API load
-  const MIN_FETCH_ZOOM = 8
-  const PAGE_SIZE = 2000
-  const MAX_PAGES = 3
+  // In development, keep previous generous behavior; in production keep safer limits
+  const MIN_FETCH_ZOOM = import.meta.env.DEV ? 0 : 8
+  const PAGE_SIZE = import.meta.env.DEV ? 5000 : 2000
+  const MAX_PAGES = import.meta.env.DEV ? Number.POSITIVE_INFINITY : 3
 
   // Abort previous in-flight requests when viewport changes rapidly
   const fetchAbortRef = useRef<AbortController | null>(null)
