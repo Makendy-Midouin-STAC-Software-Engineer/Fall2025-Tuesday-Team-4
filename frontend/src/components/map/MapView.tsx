@@ -109,13 +109,18 @@ export function MapView({ initialCenter = [-122.447303, 37.753574], initialZoom 
     ? (envBase ?? 'http://localhost:8000')
     : ''
 
+  // Tuning knobs for API load
+  const MIN_FETCH_ZOOM = 8
+  const PAGE_SIZE = 2000
+  const MAX_PAGES = 3
+
   // Abort previous in-flight requests when viewport changes rapidly
   const fetchAbortRef = useRef<AbortController | null>(null)
 
   async function fetchViewportData(map: MapboxMap): Promise<void> {
     try {
       // Avoid hammering the API at world/continent zooms
-      if (map.getZoom() < 6) {
+      if (map.getZoom() < MIN_FETCH_ZOOM) {
         const routesSrc = map.getSource('routes') as GeoJSONSource
         if (routesSrc) routesSrc.setData({ type: 'FeatureCollection', features: [] })
         const waysSrc = map.getSource('ways') as GeoJSONSource
@@ -128,20 +133,36 @@ export function MapView({ initialCenter = [-122.447303, 37.753574], initialZoom 
       const controller = new AbortController()
       fetchAbortRef.current = controller
 
-      const routesUrl = `${API_BASE}/api/route/?${bboxParamFromMap(map)}&page_size=5000`
-      const waysUrl = `${API_BASE}/api/ways/?${bboxParamFromMap(map)}&page_size=5000`
+      const routesUrl = `${API_BASE}/api/route/?${bboxParamFromMap(map)}&page_size=${PAGE_SIZE}`
+      const waysUrl = `${API_BASE}/api/ways/?${bboxParamFromMap(map)}&page_size=${PAGE_SIZE}`
       const common: RequestInit = { headers: { Accept: 'application/geo+json, application/json;q=0.9' }, signal: controller.signal }
+
+      function normalizeNext(nextUrl: string | null): string | null {
+        if (!nextUrl) return null
+        try {
+          const u = new URL(nextUrl, typeof window !== 'undefined' ? window.location.origin : 'http://localhost')
+          // Force requests through our chosen API base ('' in prod for relative /api)
+          return `${API_BASE}${u.pathname}${u.search}`
+        } catch {
+          // Fallback: if it's already a relative /api path, prefix API_BASE
+          return nextUrl.startsWith('/api/') ? `${API_BASE}${nextUrl}` : nextUrl
+        }
+      }
 
       async function fetchAllPages(startUrl: string): Promise<GeoJSON.FeatureCollection> {
         let url: string | null = startUrl
         const all: GeoJSON.Feature[] = []
+        let pages = 0
         while (url) {
           const res = await fetch(url, common)
           if (!res.ok) break
           const data = await res.json()
           const fc = toFeatureCollection(data)
           all.push(...fc.features)
-          url = (data && typeof data === 'object' && 'next' in data) ? (data.next as string | null) : null
+          pages += 1
+          if (pages >= MAX_PAGES) { url = null; break }
+          const rawNext = (data && typeof data === 'object' && 'next' in data) ? (data.next as string | null) : null
+          url = normalizeNext(rawNext)
         }
         return { type: 'FeatureCollection', features: all }
       }
@@ -165,6 +186,8 @@ export function MapView({ initialCenter = [-122.447303, 37.753574], initialZoom 
       const waysSrc = map.getSource('ways') as GeoJSONSource
       if (waysSrc) waysSrc.setData(ways)
     } catch (err) {
+      // Swallow aborts from rapid viewport changes
+      if ((err as any)?.name === 'AbortError') return
       // eslint-disable-next-line no-console
       console.error('Failed to load data', err)
     }
