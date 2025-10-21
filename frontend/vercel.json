@@ -3,7 +3,7 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "http://ihike-api-dev.eba-dpt4em9m.us-east-1.elasticbeanstalk.com/api/$1"
+      "destination": "http://ihike-env.eba-umutisn3.us-east-2.elasticbeanstalk.com/api/$1"
     }
   ]
 }

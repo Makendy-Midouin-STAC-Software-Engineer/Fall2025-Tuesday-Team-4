@@ -103,7 +103,12 @@ export function MapView({ initialCenter = [-122.447303, 37.753574], initialZoom 
   const [selectedTrailId, setSelectedTrailId] = useState<string | number | null>(null)
 
   const envBase = import.meta.env.VITE_API_BASE_URL as string | undefined
-  const API_BASE: string = envBase ?? (import.meta.env.DEV ? 'http://localhost:8000' : '')
+  // Avoid mixed-content in production: if the page is served over HTTPS and
+  // the configured API base is HTTP, fall back to a relative path (or localhost in dev)
+  const isHttpsPage = typeof window !== 'undefined' && window.location.protocol === 'https:'
+  const defaultBase = import.meta.env.DEV ? 'http://localhost:8000' : ''
+  const shouldIgnoreEnvBase = isHttpsPage && !!envBase && envBase.startsWith('http://')
+  const API_BASE: string = shouldIgnoreEnvBase ? defaultBase : (envBase ?? defaultBase)
 
   async function fetchViewportData(map: MapboxMap): Promise<void> {
     try {
