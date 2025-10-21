@@ -103,18 +103,34 @@ export function MapView({ initialCenter = [-122.447303, 37.753574], initialZoom 
   const [selectedTrailId, setSelectedTrailId] = useState<string | number | null>(null)
 
   const envBase = import.meta.env.VITE_API_BASE_URL as string | undefined
-  // Avoid mixed-content in production: if the page is served over HTTPS and
-  // the configured API base is HTTP, fall back to a relative path (or localhost in dev)
-  const isHttpsPage = typeof window !== 'undefined' && window.location.protocol === 'https:'
-  const defaultBase = import.meta.env.DEV ? 'http://localhost:8000' : ''
-  const shouldIgnoreEnvBase = isHttpsPage && !!envBase && envBase.startsWith('http://')
-  const API_BASE: string = shouldIgnoreEnvBase ? defaultBase : (envBase ?? defaultBase)
+  // Production: always use relative /api (proxied by vercel.json) to avoid mixed content and CORS.
+  // Development: use local backend if not overridden.
+  const API_BASE: string = import.meta.env.DEV
+    ? (envBase ?? 'http://localhost:8000')
+    : ''
+
+  // Abort previous in-flight requests when viewport changes rapidly
+  const fetchAbortRef = useRef<AbortController | null>(null)
 
   async function fetchViewportData(map: MapboxMap): Promise<void> {
     try {
+      // Avoid hammering the API at world/continent zooms
+      if (map.getZoom() < 6) {
+        const routesSrc = map.getSource('routes') as GeoJSONSource
+        if (routesSrc) routesSrc.setData({ type: 'FeatureCollection', features: [] })
+        const waysSrc = map.getSource('ways') as GeoJSONSource
+        if (waysSrc) waysSrc.setData({ type: 'FeatureCollection', features: [] })
+        return
+      }
+
+      // Abort previous requests
+      try { fetchAbortRef.current?.abort() } catch {}
+      const controller = new AbortController()
+      fetchAbortRef.current = controller
+
       const routesUrl = `${API_BASE}/api/route/?${bboxParamFromMap(map)}&page_size=5000`
       const waysUrl = `${API_BASE}/api/ways/?${bboxParamFromMap(map)}&page_size=5000`
-      const common: RequestInit = { headers: { Accept: 'application/geo+json, application/json;q=0.9' } }
+      const common: RequestInit = { headers: { Accept: 'application/geo+json, application/json;q=0.9' }, signal: controller.signal }
 
       async function fetchAllPages(startUrl: string): Promise<GeoJSON.FeatureCollection> {
         let url: string | null = startUrl
