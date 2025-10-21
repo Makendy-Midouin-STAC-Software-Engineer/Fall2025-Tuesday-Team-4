@@ -1,19 +1,24 @@
 from rest_framework_gis.serializers import GeoFeatureModelSerializer
-from .models import Trail, Path
+from rest_framework_gis.fields import GeometryField
+from .models import Route, Ways
 
 
-class TrailSerializer(GeoFeatureModelSerializer):
+class RouteSerializer(GeoFeatureModelSerializer):
+    # Ensure geometry is rendered as a GeoJSON geometry object, not WKT
+    geometry = GeometryField()
     class Meta:
-        model = Trail
+        model = Route
         fields = (
             'id', 'osm_id', 'name', 'route', 'difficulty', 'sac_scale', 'length', 'website'
         )
         geo_field = 'geometry'
 
 
-class PathSerializer(GeoFeatureModelSerializer):
+class WaysSerializer(GeoFeatureModelSerializer):
+    # Ensure geometry is rendered as a GeoJSON geometry object, not WKT
+    geometry = GeometryField()
     class Meta:
-        model = Path
+        model = Ways
         fields = (
             'id', 'osm_id', 'name', 'highway', 'difficulty', 'sac_scale', 'length', 'website'
         )

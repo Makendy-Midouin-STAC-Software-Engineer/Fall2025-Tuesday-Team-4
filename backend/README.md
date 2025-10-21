@@ -1,6 +1,6 @@
 ## iHike Backend (Django + PostGIS)
 
-Backend for iHike: a geospatial API serving hiking Trails and Paths with bbox, filtering, and ordering support. Built with Django REST Framework and GeoDjango on PostgreSQL/PostGIS. Deployed on AWS Elastic Beanstalk; designed to integrate with a Vite/React frontend.
+Backend for iHike: a geospatial API serving hiking Route and Ways with bbox, filtering, and ordering support. Built with Django REST Framework and GeoDjango on PostgreSQL/PostGIS. Deployed on AWS Elastic Beanstalk; designed to integrate with a Vite/React frontend.
 
 ### Tech Stack
 - Django 5 + Django REST Framework
@@ -75,7 +75,7 @@ Example files are in `backend/trailsData/`. Use the custom management command:
 ```
 python manage.py import_geojson trailsData/hiking_route.geojson trailsData/hiking_ways.geojson --update-existing
 ```
-This will import Trails (routes) and Paths (ways), computing geodesic length (km) when missing.
+This will import Route (routes) and Ways (ways), computing geodesic length (km) when missing.
 
 5) Start the development server
 ```
@@ -87,12 +87,12 @@ Health check: `GET /health/` → `{ "status": "ok" }`
 ### API
 Base path: `/api/`
 
-- `GET /api/trails/` — GeoJSON features for Trails
+- `GET /api/route/` — GeoJSON features for Route
   - Filters: `difficulty`, `route`, `length__gte`, `length__lte`
   - BBox filter: `in_bbox=minx,miny,maxx,maxy` (WGS84)
   - Ordering: `?ordering=name` or `?ordering=length`
 
-- `GET /api/paths/` — GeoJSON features for Paths
+- `GET /api/ways/` — GeoJSON features for Ways
   - Filters: `difficulty`, `highway`, `length__gte`, `length__lte`
   - BBox filter: `in_bbox=minx,miny,maxx,maxy`
   - Ordering: `?ordering=name` or `?ordering=length`

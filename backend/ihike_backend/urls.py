@@ -18,14 +18,17 @@ from django.contrib import admin
 from django.urls import path, include
 from django.http import JsonResponse
 from rest_framework.routers import DefaultRouter
-from hiking.views import TrailViewSet, PathViewSet
+from hiking.views import RouteViewSet, WaysViewSet
 
 def health(_request):
     return JsonResponse({"status": "ok"})
 
 router = DefaultRouter()
-router.register(r'trails', TrailViewSet, basename='trail')
-router.register(r'paths', PathViewSet, basename='path')
+router.register(r'route', RouteViewSet, basename='route')
+router.register(r'ways', WaysViewSet, basename='ways')
+# Backward-compatible routes (deprecated): keep old endpoints working
+router.register(r'trails', RouteViewSet, basename='trails_legacy')
+router.register(r'paths', WaysViewSet, basename='paths_legacy')
 
 urlpatterns = [
     path('', health, name='root-health'),

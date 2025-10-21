@@ -7,18 +7,18 @@ except Exception:
 
     class BaseGeoAdmin(_admin.ModelAdmin):
         pass
-from .models import Trail, Path
+from .models import Route, Ways
 
 
-@admin.register(Trail)
-class TrailAdmin(BaseGeoAdmin):
+@admin.register(Route)
+class RouteAdmin(BaseGeoAdmin):
     list_display = ("name", "route", "length", "difficulty")
     search_fields = ("name", "route")
     list_filter = ("difficulty",)
 
 
-@admin.register(Path)
-class PathAdmin(BaseGeoAdmin):
+@admin.register(Ways)
+class WaysAdmin(BaseGeoAdmin):
     list_display = ("name", "highway", "length", "difficulty")
     search_fields = ("name", "highway")
     list_filter = ("highway", "difficulty")

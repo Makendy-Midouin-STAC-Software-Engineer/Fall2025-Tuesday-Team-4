@@ -3,7 +3,7 @@ from django.core.validators import MinValueValidator
 from django.contrib.postgres.indexes import GistIndex
 
 
-class Trail(models.Model):
+class Route(models.Model):
     osm_id = models.BigIntegerField(null=True, blank=True, unique=True, db_index=True)
     name = models.CharField(max_length=255, db_index=True)
     route = models.CharField(max_length=100, db_index=True)
@@ -23,7 +23,7 @@ class Trail(models.Model):
         return self.name
 
 
-class Path(models.Model):
+class Ways(models.Model):
     osm_id = models.BigIntegerField(null=True, blank=True, unique=True, db_index=True)
     name = models.CharField(max_length=255, db_index=True)
     highway = models.CharField(max_length=100, db_index=True)

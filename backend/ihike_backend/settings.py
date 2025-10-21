@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'django.contrib.gis',
     'rest_framework',
+    'rest_framework_gis',
     'django_filters',
     'corsheaders',
     'hiking',
@@ -231,7 +232,12 @@ REST_FRAMEWORK = {
         'rest_framework_gis.filters.InBBoxFilter',
         'rest_framework.filters.OrderingFilter',
     ],
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    # Use default JSON renderer; GeoFeatureModelSerializer in serializers
+    # will produce valid GeoJSON (geometry objects) without a special renderer.
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',
+    ] + (['rest_framework.renderers.BrowsableAPIRenderer'] if DEBUG else []),
+    'DEFAULT_PAGINATION_CLASS': 'ihike_backend.pagination.StandardResultsSetPagination',
     'PAGE_SIZE': int(os.getenv('API_PAGE_SIZE', '200')),
     'COERCE_DECIMAL_TO_STRING': False,
 }
