@@ -1,0 +1,95 @@
+name: iHike Django CI/CD
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [ "3.11" ]
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up caching for pip
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install awsebcli coverage coveralls black flake8
+
+    - name: Run Black Check
+      run: black --check . --exclude "../frontend|.venv|venv|migrations|__pycache__"
+
+    - name: Run Flake8
+      run: flake8 .
+
+    - name: Run Django Tests with Coverage
+      run: |
+        python manage.py migrate --settings=ihike_backend.settings_ci
+        coverage run --rcfile=.coveragerc manage.py test --settings=ihike_backend.settings_ci
+        coverage report --rcfile=.coveragerc
+        coverage xml --rcfile=.coveragerc -o coverage.xml
+
+    - name: Upload Coverage to Coveralls
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: coveralls --service=github
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+
+    - name: Install EB CLI
+      run: pip install awsebcli
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-2  # change if your EB region differs
+
+    - name: Deploy to Elastic Beanstalk
+      env:
+        AWS_REGION: us-east-2
+        EB_APPLICATION_NAME: ihike
+        EB_ENVIRONMENT_NAME: Ihike-env
+      run: |
+        eb init "$EB_APPLICATION_NAME" --platform python-3.11 --region "$AWS_REGION"
+        eb use "$EB_ENVIRONMENT_NAME"
+        eb deploy

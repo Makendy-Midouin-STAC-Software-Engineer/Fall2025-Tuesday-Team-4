@@ -8,40 +8,61 @@ class Migration(migrations.Migration):
 
     initial = True
 
-    dependencies = [
-    ]
+    dependencies = []
 
     operations = [
         migrations.CreateModel(
-            name='Path',
+            name="Path",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('osm_id', models.BigIntegerField()),
-                ('name', models.CharField(max_length=255)),
-                ('highway', models.CharField(max_length=100)),
-                ('difficulty', models.CharField(max_length=50)),
-                ('length', models.FloatField()),
-                ('website', models.URLField(blank=True)),
-                ('geometry', django.contrib.gis.db.models.fields.MultiLineStringField(srid=4326)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("osm_id", models.BigIntegerField()),
+                ("name", models.CharField(max_length=255)),
+                ("highway", models.CharField(max_length=100)),
+                ("difficulty", models.CharField(max_length=50)),
+                ("length", models.FloatField()),
+                ("website", models.URLField(blank=True)),
+                (
+                    "geometry",
+                    django.contrib.gis.db.models.fields.MultiLineStringField(srid=4326),
+                ),
             ],
             options={
-                'ordering': ['name'],
+                "ordering": ["name"],
             },
         ),
         migrations.CreateModel(
-            name='Trail',
+            name="Trail",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('osm_id', models.BigIntegerField()),
-                ('name', models.CharField(max_length=255)),
-                ('route', models.CharField(max_length=100)),
-                ('difficulty', models.CharField(max_length=50)),
-                ('length', models.FloatField()),
-                ('website', models.URLField(blank=True)),
-                ('geometry', django.contrib.gis.db.models.fields.MultiLineStringField(srid=4326)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("osm_id", models.BigIntegerField()),
+                ("name", models.CharField(max_length=255)),
+                ("route", models.CharField(max_length=100)),
+                ("difficulty", models.CharField(max_length=50)),
+                ("length", models.FloatField()),
+                ("website", models.URLField(blank=True)),
+                (
+                    "geometry",
+                    django.contrib.gis.db.models.fields.MultiLineStringField(srid=4326),
+                ),
             ],
             options={
-                'ordering': ['name'],
+                "ordering": ["name"],
             },
         ),
     ]

@@ -4,12 +4,12 @@ from decimal import Decimal
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
-from django.db.models import DecimalField, Value
+from django.db.models import DecimalField, Value, FloatField
 from django.db.models.expressions import ExpressionWrapper
 from django.contrib.gis.db.models.functions import Length as GeomLength
 from django.contrib.gis.geos import GEOSGeometry, MultiLineString, LineString
 
-from hiking.models import Trail, Path
+from hiking.models import Route, Ways
 
 
 def coerce_multilinestring(geom: GEOSGeometry) -> MultiLineString:
@@ -25,15 +25,15 @@ def coerce_multilinestring(geom: GEOSGeometry) -> MultiLineString:
         ml.srid = geom.srid or 4326
         return ml
     # Some GeoJSON may come as GeometryCollection or others; try to coerce
-    if geom.geom_type == 'GeometryCollection':
+    if geom.geom_type == "GeometryCollection":
         lines: List[LineString] = [g for g in geom if isinstance(g, LineString)]
         if not lines:
             raise ValueError("GeometryCollection contains no LineString geometry")
         ml = MultiLineString(*lines)
         ml.srid = geom.srid or 4326
         return ml
-    if geom.geom_type == 'Polygon':
-        raise ValueError("Polygon geometry is not supported for trails/paths")
+    if geom.geom_type == "Polygon":
+        raise ValueError("Polygon geometry is not supported for route/ways")
     raise ValueError(f"Unsupported geometry type: {geom.geom_type}")
 
 
@@ -78,7 +78,7 @@ def geodesic_km_expr() -> ExpressionWrapper:
 
 class Command(BaseCommand):
     help = (
-        "Import GeoJSON into Trail and Path models. Usage:"
+        "Import GeoJSON into Route and Ways models. Usage:"
         " python manage.py import_geojson hiking_route.geojson hiking_ways.geojson"
         " [--update-existing]"
     )
@@ -87,7 +87,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "files",
             nargs="+",
-            help="GeoJSON files. hiking_route.geojson -> Trail, hiking_ways.geojson -> Path",
+            help="GeoJSON files. hiking_route.geojson -> Route, hiking_ways.geojson -> Ways",
         )
         parser.add_argument(
             "--update-existing",
@@ -104,39 +104,49 @@ class Command(BaseCommand):
         if not files:
             raise CommandError("Provide at least one GeoJSON file")
 
-        trails_created = 0
-        trails_updated = 0
-        paths_created = 0
-        paths_updated = 0
+        routes_created = 0
+        routes_updated = 0
+        ways_created = 0
+        ways_updated = 0
         skipped = 0
 
         for file_path in files:
             lower = file_path.lower()
             if "route" in lower:
-                created, updated, skipped_file = self._import_trails(file_path, update_existing)
-                trails_created += created
-                trails_updated += updated
+                created, updated, skipped_file = self._import_routes(
+                    file_path, update_existing
+                )
+                routes_created += created
+                routes_updated += updated
                 skipped += skipped_file
             elif "ways" in lower or "path" in lower:
-                created, updated, skipped_file = self._import_paths(file_path, update_existing)
-                paths_created += created
-                paths_updated += updated
+                created, updated, skipped_file = self._import_ways(
+                    file_path, update_existing
+                )
+                ways_created += created
+                ways_updated += updated
                 skipped += skipped_file
             else:
-                self.stdout.write(self.style.WARNING(
-                    f"Skipping {file_path}: cannot infer model (expects 'route' or 'ways' in filename)"
-                ))
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"Skipping {file_path}: cannot infer model (expects 'route' or 'ways' in filename)"
+                    )
+                )
 
-        self.stdout.write(self.style.SUCCESS(
-            (
-                f"Imported Trails: {trails_created} (updated {trails_updated}), "
-                f"Paths: {paths_created} (updated {paths_updated}), "
-                f"Skipped duplicates: {skipped}"
+        self.stdout.write(
+            self.style.SUCCESS(
+                (
+                    f"Imported Route: {routes_created} (updated {routes_updated}), "
+                    f"Ways: {ways_created} (updated {ways_updated}), "
+                    f"Skipped duplicates: {skipped}"
+                )
             )
-        ))
+        )
 
     @transaction.atomic
-    def _import_trails(self, file_path: str, update_existing: bool) -> Tuple[int, int, int]:
+    def _import_routes(
+        self, file_path: str, update_existing: bool
+    ) -> Tuple[int, int, int]:
         created_count = 0
         updated_count = 0
         skipped_dupes = 0
@@ -153,7 +163,9 @@ class Command(BaseCommand):
 
             osm_id_raw = props.get("osm_id")
             try:
-                osm_id = int(osm_id_raw) if osm_id_raw not in (None, "", "null") else None
+                osm_id = (
+                    int(osm_id_raw) if osm_id_raw not in (None, "", "null") else None
+                )
             except ValueError:
                 osm_id = None
 
@@ -169,11 +181,11 @@ class Command(BaseCommand):
                 length_value = None
 
             if osm_id is not None:
-                existing = Trail.objects.filter(osm_id=osm_id).first()
+                existing = Route.objects.filter(osm_id=osm_id).first()
                 if existing:
                     if update_existing:
                         updates: Dict[str, Any] = {}
-                        new_sac = (props.get("sac_scale") or None)
+                        new_sac = props.get("sac_scale") or None
                         if new_sac != existing.sac_scale:
                             updates["sac_scale"] = new_sac
                             updates["difficulty"] = map_sac_scale_to_difficulty(new_sac)
@@ -191,7 +203,7 @@ class Command(BaseCommand):
                         if new_route and not existing.route:
                             updates["route"] = new_route
                         if updates:
-                            Trail.objects.filter(pk=existing.pk).update(**updates)
+                            Route.objects.filter(pk=existing.pk).update(**updates)
                             updated_count += 1
                         else:
                             skipped_dupes += 1
@@ -202,13 +214,15 @@ class Command(BaseCommand):
                                 GeomLength("geometry", spheroid=True) / Value(1000.0),
                                 output_field=FloatField(),
                             )
-                            Trail.objects.filter(pk=existing.pk).update(length=length_km)
+                            Route.objects.filter(pk=existing.pk).update(
+                                length=length_km
+                            )
                         skipped_dupes += 1
                     continue
 
-            trail = Trail(
+            route_obj = Route(
                 osm_id=osm_id,
-                name=(props.get("name") or "Unnamed Trail"),
+                name=(props.get("name") or "Unnamed Route"),
                 route=(props.get("route") or "hiking"),
                 difficulty=map_sac_scale_to_difficulty(props.get("sac_scale")),
                 sac_scale=(props.get("sac_scale") or None),
@@ -216,15 +230,17 @@ class Command(BaseCommand):
                 website=(props.get("website") or ""),
                 geometry=ml,
             )
-            trail.save()
+            route_obj.save()
             # If no valid length provided, compute geodesic length in km via PostGIS
             if length_value is None:
-                Trail.objects.filter(pk=trail.pk).update(length=geodesic_km_expr())
+                Route.objects.filter(pk=route_obj.pk).update(length=geodesic_km_expr())
             created_count += 1
         return created_count, updated_count, skipped_dupes
 
     @transaction.atomic
-    def _import_paths(self, file_path: str, update_existing: bool) -> Tuple[int, int, int]:
+    def _import_ways(
+        self, file_path: str, update_existing: bool
+    ) -> Tuple[int, int, int]:
         created_count = 0
         updated_count = 0
         skipped_dupes = 0
@@ -241,7 +257,9 @@ class Command(BaseCommand):
 
             osm_id_raw = props.get("osm_id")
             try:
-                osm_id = int(osm_id_raw) if osm_id_raw not in (None, "", "null") else None
+                osm_id = (
+                    int(osm_id_raw) if osm_id_raw not in (None, "", "null") else None
+                )
             except ValueError:
                 osm_id = None
 
@@ -257,11 +275,11 @@ class Command(BaseCommand):
                 length_value = None
 
             if osm_id is not None:
-                existing = Path.objects.filter(osm_id=osm_id).first()
+                existing = Ways.objects.filter(osm_id=osm_id).first()
                 if existing:
                     if update_existing:
                         updates: Dict[str, Any] = {}
-                        new_sac = (props.get("sac_scale") or None)
+                        new_sac = props.get("sac_scale") or None
                         if new_sac != existing.sac_scale:
                             updates["sac_scale"] = new_sac
                             updates["difficulty"] = map_sac_scale_to_difficulty(new_sac)
@@ -277,7 +295,7 @@ class Command(BaseCommand):
                         if new_highway and not existing.highway:
                             updates["highway"] = new_highway
                         if updates:
-                            Path.objects.filter(pk=existing.pk).update(**updates)
+                            Ways.objects.filter(pk=existing.pk).update(**updates)
                             updated_count += 1
                         else:
                             skipped_dupes += 1
@@ -287,13 +305,13 @@ class Command(BaseCommand):
                                 GeomLength("geometry", spheroid=True) / Value(1000.0),
                                 output_field=FloatField(),
                             )
-                            Path.objects.filter(pk=existing.pk).update(length=length_km)
+                            Ways.objects.filter(pk=existing.pk).update(length=length_km)
                         skipped_dupes += 1
                     continue
 
-            path = Path(
+            ways = Ways(
                 osm_id=osm_id,
-                name=(props.get("name") or "Unnamed Path"),
+                name=(props.get("name") or "Unnamed Ways"),
                 highway=(props.get("highway") or "path"),
                 difficulty=map_sac_scale_to_difficulty(props.get("sac_scale")),
                 sac_scale=(props.get("sac_scale") or None),
@@ -301,10 +319,8 @@ class Command(BaseCommand):
                 website=(props.get("website") or ""),
                 geometry=ml,
             )
-            path.save()
+            ways.save()
             if length_value is None:
-                Path.objects.filter(pk=path.pk).update(length=geodesic_km_expr())
+                Ways.objects.filter(pk=ways.pk).update(length=geodesic_km_expr())
             created_count += 1
         return created_count, updated_count, skipped_dupes
-
-

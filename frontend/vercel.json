@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "http://ihike-env.eba-umutisn3.us-east-2.elasticbeanstalk.com/api/$1"
+    }
+  ]
+}
+
+

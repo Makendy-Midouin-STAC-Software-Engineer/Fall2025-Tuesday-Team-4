@@ -1,0 +1,24 @@
+[run]
+branch = True
+source = 
+    ihike_backend
+    hiking
+omit =
+    */migrations/*
+    */tests/*
+    manage.py
+    */__init__.py
+    ihike_backend/settings.py
+    ihike_backend/urls.py
+    ihike_backend/wsgi.py
+    ihike_backend/asgi.py
+    hiking/management/*
+    hiking/admin.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.
+show_missing = True
+skip_covered = True
+
