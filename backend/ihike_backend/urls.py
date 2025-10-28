@@ -14,25 +14,28 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
+
 from django.contrib import admin
 from django.urls import path, include
 from django.http import JsonResponse
 from rest_framework.routers import DefaultRouter
 from hiking.views import RouteViewSet, WaysViewSet
 
+
 def health(_request):
     return JsonResponse({"status": "ok"})
 
+
 router = DefaultRouter()
-router.register(r'route', RouteViewSet, basename='route')
-router.register(r'ways', WaysViewSet, basename='ways')
+router.register(r"route", RouteViewSet, basename="route")
+router.register(r"ways", WaysViewSet, basename="ways")
 # Backward-compatible routes (deprecated): keep old endpoints working
-router.register(r'trails', RouteViewSet, basename='trails_legacy')
-router.register(r'paths', WaysViewSet, basename='paths_legacy')
+router.register(r"trails", RouteViewSet, basename="trails_legacy")
+router.register(r"paths", WaysViewSet, basename="paths_legacy")
 
 urlpatterns = [
-    path('', health, name='root-health'),
-    path('health/', health, name='health'),
-    path('admin/', admin.site.urls),
-    path('api/', include(router.urls)),
+    path("", health, name="root-health"),
+    path("health/", health, name="health"),
+    path("admin/", admin.site.urls),
+    path("api/", include(router.urls)),
 ]

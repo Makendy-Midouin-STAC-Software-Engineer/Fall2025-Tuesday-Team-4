@@ -1,4 +1,5 @@
 from django.contrib import admin
+
 try:
     from django.contrib.gis.admin import OSMGeoAdmin as BaseGeoAdmin
 except Exception:
@@ -7,6 +8,8 @@ except Exception:
 
     class BaseGeoAdmin(_admin.ModelAdmin):
         pass
+
+
 from .models import Route, Ways
 
 
@@ -22,5 +25,6 @@ class WaysAdmin(BaseGeoAdmin):
     list_display = ("name", "highway", "length", "difficulty")
     search_fields = ("name", "highway")
     list_filter = ("highway", "difficulty")
+
 
 # Register your models here.

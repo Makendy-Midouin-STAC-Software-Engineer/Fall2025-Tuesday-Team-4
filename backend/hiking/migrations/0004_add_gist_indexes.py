@@ -7,16 +7,20 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('hiking', '0003_add_filter_indexes'),
+        ("hiking", "0003_add_filter_indexes"),
     ]
 
     operations = [
         migrations.AddIndex(
-            model_name='path',
-            index=django.contrib.postgres.indexes.GistIndex(fields=['geometry'], name='path_geometry_gix'),
+            model_name="path",
+            index=django.contrib.postgres.indexes.GistIndex(
+                fields=["geometry"], name="path_geometry_gix"
+            ),
         ),
         migrations.AddIndex(
-            model_name='trail',
-            index=django.contrib.postgres.indexes.GistIndex(fields=['geometry'], name='trail_geometry_gix'),
+            model_name="trail",
+            index=django.contrib.postgres.indexes.GistIndex(
+                fields=["geometry"], name="trail_geometry_gix"
+            ),
         ),
     ]

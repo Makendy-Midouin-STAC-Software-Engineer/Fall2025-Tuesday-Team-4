@@ -9,7 +9,9 @@ class Route(models.Model):
     route = models.CharField(max_length=100, db_index=True)
     difficulty = models.CharField(max_length=50, db_index=True)
     sac_scale = models.CharField(max_length=100, null=True, blank=True)
-    length = models.DecimalField(max_digits=9, decimal_places=3, validators=[MinValueValidator(0)], db_index=True)
+    length = models.DecimalField(
+        max_digits=9, decimal_places=3, validators=[MinValueValidator(0)], db_index=True
+    )
     website = models.URLField(blank=True)
     geometry = models.MultiLineStringField(srid=4326)
 
@@ -29,7 +31,9 @@ class Ways(models.Model):
     highway = models.CharField(max_length=100, db_index=True)
     difficulty = models.CharField(max_length=50, db_index=True)
     sac_scale = models.CharField(max_length=100, null=True, blank=True)
-    length = models.DecimalField(max_digits=9, decimal_places=3, validators=[MinValueValidator(0)], db_index=True)
+    length = models.DecimalField(
+        max_digits=9, decimal_places=3, validators=[MinValueValidator(0)], db_index=True
+    )
     website = models.URLField(blank=True)
     geometry = models.MultiLineStringField(srid=4326)
 
@@ -41,5 +45,6 @@ class Ways(models.Model):
 
     def __str__(self) -> str:
         return self.name
+
 
 # Create your models here.

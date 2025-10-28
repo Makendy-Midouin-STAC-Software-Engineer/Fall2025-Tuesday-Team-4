@@ -6,48 +6,48 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('hiking', '0002_add_sac_scale_and_osm_constraints'),
+        ("hiking", "0002_add_sac_scale_and_osm_constraints"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='path',
-            name='difficulty',
+            model_name="path",
+            name="difficulty",
             field=models.CharField(db_index=True, max_length=50),
         ),
         migrations.AlterField(
-            model_name='path',
-            name='highway',
+            model_name="path",
+            name="highway",
             field=models.CharField(db_index=True, max_length=100),
         ),
         migrations.AlterField(
-            model_name='path',
-            name='length',
+            model_name="path",
+            name="length",
             field=models.FloatField(db_index=True),
         ),
         migrations.AlterField(
-            model_name='path',
-            name='name',
+            model_name="path",
+            name="name",
             field=models.CharField(db_index=True, max_length=255),
         ),
         migrations.AlterField(
-            model_name='trail',
-            name='difficulty',
+            model_name="trail",
+            name="difficulty",
             field=models.CharField(db_index=True, max_length=50),
         ),
         migrations.AlterField(
-            model_name='trail',
-            name='length',
+            model_name="trail",
+            name="length",
             field=models.FloatField(db_index=True),
         ),
         migrations.AlterField(
-            model_name='trail',
-            name='name',
+            model_name="trail",
+            name="name",
             field=models.CharField(db_index=True, max_length=255),
         ),
         migrations.AlterField(
-            model_name='trail',
-            name='route',
+            model_name="trail",
+            name="route",
             field=models.CharField(db_index=True, max_length=100),
         ),
     ]

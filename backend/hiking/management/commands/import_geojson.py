@@ -25,14 +25,14 @@ def coerce_multilinestring(geom: GEOSGeometry) -> MultiLineString:
         ml.srid = geom.srid or 4326
         return ml
     # Some GeoJSON may come as GeometryCollection or others; try to coerce
-    if geom.geom_type == 'GeometryCollection':
+    if geom.geom_type == "GeometryCollection":
         lines: List[LineString] = [g for g in geom if isinstance(g, LineString)]
         if not lines:
             raise ValueError("GeometryCollection contains no LineString geometry")
         ml = MultiLineString(*lines)
         ml.srid = geom.srid or 4326
         return ml
-    if geom.geom_type == 'Polygon':
+    if geom.geom_type == "Polygon":
         raise ValueError("Polygon geometry is not supported for route/ways")
     raise ValueError(f"Unsupported geometry type: {geom.geom_type}")
 
@@ -113,30 +113,40 @@ class Command(BaseCommand):
         for file_path in files:
             lower = file_path.lower()
             if "route" in lower:
-                created, updated, skipped_file = self._import_routes(file_path, update_existing)
+                created, updated, skipped_file = self._import_routes(
+                    file_path, update_existing
+                )
                 routes_created += created
                 routes_updated += updated
                 skipped += skipped_file
             elif "ways" in lower or "path" in lower:
-                created, updated, skipped_file = self._import_ways(file_path, update_existing)
+                created, updated, skipped_file = self._import_ways(
+                    file_path, update_existing
+                )
                 ways_created += created
                 ways_updated += updated
                 skipped += skipped_file
             else:
-                self.stdout.write(self.style.WARNING(
-                    f"Skipping {file_path}: cannot infer model (expects 'route' or 'ways' in filename)"
-                ))
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"Skipping {file_path}: cannot infer model (expects 'route' or 'ways' in filename)"
+                    )
+                )
 
-        self.stdout.write(self.style.SUCCESS(
-            (
-                f"Imported Route: {routes_created} (updated {routes_updated}), "
-                f"Ways: {ways_created} (updated {ways_updated}), "
-                f"Skipped duplicates: {skipped}"
+        self.stdout.write(
+            self.style.SUCCESS(
+                (
+                    f"Imported Route: {routes_created} (updated {routes_updated}), "
+                    f"Ways: {ways_created} (updated {ways_updated}), "
+                    f"Skipped duplicates: {skipped}"
+                )
             )
-        ))
+        )
 
     @transaction.atomic
-    def _import_routes(self, file_path: str, update_existing: bool) -> Tuple[int, int, int]:
+    def _import_routes(
+        self, file_path: str, update_existing: bool
+    ) -> Tuple[int, int, int]:
         created_count = 0
         updated_count = 0
         skipped_dupes = 0
@@ -153,7 +163,9 @@ class Command(BaseCommand):
 
             osm_id_raw = props.get("osm_id")
             try:
-                osm_id = int(osm_id_raw) if osm_id_raw not in (None, "", "null") else None
+                osm_id = (
+                    int(osm_id_raw) if osm_id_raw not in (None, "", "null") else None
+                )
             except ValueError:
                 osm_id = None
 
@@ -173,7 +185,7 @@ class Command(BaseCommand):
                 if existing:
                     if update_existing:
                         updates: Dict[str, Any] = {}
-                        new_sac = (props.get("sac_scale") or None)
+                        new_sac = props.get("sac_scale") or None
                         if new_sac != existing.sac_scale:
                             updates["sac_scale"] = new_sac
                             updates["difficulty"] = map_sac_scale_to_difficulty(new_sac)
@@ -202,7 +214,9 @@ class Command(BaseCommand):
                                 GeomLength("geometry", spheroid=True) / Value(1000.0),
                                 output_field=FloatField(),
                             )
-                            Route.objects.filter(pk=existing.pk).update(length=length_km)
+                            Route.objects.filter(pk=existing.pk).update(
+                                length=length_km
+                            )
                         skipped_dupes += 1
                     continue
 
@@ -224,7 +238,9 @@ class Command(BaseCommand):
         return created_count, updated_count, skipped_dupes
 
     @transaction.atomic
-    def _import_ways(self, file_path: str, update_existing: bool) -> Tuple[int, int, int]:
+    def _import_ways(
+        self, file_path: str, update_existing: bool
+    ) -> Tuple[int, int, int]:
         created_count = 0
         updated_count = 0
         skipped_dupes = 0
@@ -241,7 +257,9 @@ class Command(BaseCommand):
 
             osm_id_raw = props.get("osm_id")
             try:
-                osm_id = int(osm_id_raw) if osm_id_raw not in (None, "", "null") else None
+                osm_id = (
+                    int(osm_id_raw) if osm_id_raw not in (None, "", "null") else None
+                )
             except ValueError:
                 osm_id = None
 
@@ -261,7 +279,7 @@ class Command(BaseCommand):
                 if existing:
                     if update_existing:
                         updates: Dict[str, Any] = {}
-                        new_sac = (props.get("sac_scale") or None)
+                        new_sac = props.get("sac_scale") or None
                         if new_sac != existing.sac_scale:
                             updates["sac_scale"] = new_sac
                             updates["difficulty"] = map_sac_scale_to_difficulty(new_sac)
@@ -306,5 +324,3 @@ class Command(BaseCommand):
                 Ways.objects.filter(pk=ways.pk).update(length=geodesic_km_expr())
             created_count += 1
         return created_count, updated_count, skipped_dupes
-
-
