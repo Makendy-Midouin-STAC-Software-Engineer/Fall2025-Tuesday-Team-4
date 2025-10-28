@@ -8,6 +8,12 @@ omit =
     */tests/*
     manage.py
     */__init__.py
+    ihike_backend/settings.py
+    ihike_backend/urls.py
+    ihike_backend/wsgi.py
+    ihike_backend/asgi.py
+    hiking/management/*
+    hiking/admin.py
 
 [report]
 exclude_lines =
