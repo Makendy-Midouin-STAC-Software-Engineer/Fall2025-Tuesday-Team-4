@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Map as MapboxMap, LngLatLike, MapboxOptions, LngLatBounds, GeoJSONSource } from 'mapbox-gl'
+import type { Map as MapboxMap, LngLatLike, MapboxOptions } from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 
 import { LayerToggles } from '@/components/map/LayerToggles'
@@ -8,7 +8,7 @@ import { updateBaseStyle } from '@/utils/map/updateBaseStyle'
 import { addTrailSources } from '@/utils/map/addTrailSources'
 import { addTrailLayers, ROUTE_HALO_LAYER_ID, ROUTE_LAYER_ID, WAYS_LAYER_ID } from '@/utils/map/addTrailLayers'
 import { addHoverHighlight, addClickPopup, ensureSelectionHighlightLayers } from '@/utils/map/interactionHandlers'
-import { DARK_STYLE, OUTDOORS_STYLE, getRouteColor, isDarkStyle, routeHaloWidthExpression, routeWidthExpression, waysWidthExpression } from '@/utils/map/trailColoring'
+import { DARK_STYLE, OUTDOORS_STYLE, isDarkStyle, routeHaloWidthExpression, routeWidthExpression, waysWidthExpression } from '@/utils/map/trailColoring'
 
 interface MapViewProps {
   initialCenter?: LngLatLike
@@ -51,43 +51,7 @@ function initialTogglesFromStorage() {
   }
 }
 
-function bboxParamFromMap(map: MapboxMap): string {
-  const bounds = map.getBounds() as LngLatBounds
-  return `in_bbox=${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`
-}
-
-function toFeatureCollection(input: unknown): GeoJSON.FeatureCollection {
-  const empty: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] }
-
-  function isValidGeometry(g: any): boolean {
-    if (!g || typeof g !== 'object') return false
-    if (typeof g.type !== 'string') return false
-    return 'coordinates' in g
-  }
-
-  function isValidFeature(f: any): f is GeoJSON.Feature {
-    return f && f.type === 'Feature' && isValidGeometry(f.geometry)
-  }
-
-  try {
-    const v: any = input as any
-    let features: unknown = []
-
-    if (v && typeof v === 'object') {
-      if (v.type === 'FeatureCollection' && Array.isArray(v.features)) features = v.features
-      else if (v.results && v.results.type === 'FeatureCollection' && Array.isArray(v.results.features)) features = v.results.features
-      else if (Array.isArray(v.results)) features = v.results
-      else if (Array.isArray(v.features)) features = v.features
-    }
-
-    if (Array.isArray(features)) {
-      const filtered = (features as unknown[]).filter(isValidFeature) as GeoJSON.Feature[]
-      return { type: 'FeatureCollection', features: filtered }
-    }
-  } catch {}
-
-  return empty
-}
+// No backend GeoJSON fetching; vector tiles supply trail data
 
 export function MapView({ initialCenter = [-122.447303, 37.753574], initialZoom = 10 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -103,104 +67,7 @@ export function MapView({ initialCenter = [-122.447303, 37.753574], initialZoom 
   const [selectedTrailId, setSelectedTrailId] = useState<string | number | null>(null)
 
   const envBase = import.meta.env.VITE_API_BASE_URL as string | undefined
-  // Production: always use relative /api (proxied by vercel.json) to avoid mixed content and CORS.
-  // Development: use local backend if not overridden.
-  const API_BASE: string = import.meta.env.DEV
-    ? (envBase ?? 'http://localhost:8000')
-    : ''
-
-  // Tuning knobs for API load
-  // In development, keep previous generous behavior; in production keep safer limits
-  const MIN_FETCH_ZOOM = import.meta.env.DEV ? 0 : 8
-  const PAGE_SIZE = import.meta.env.DEV ? 5000 : 2000
-  const MAX_PAGES = import.meta.env.DEV ? Number.POSITIVE_INFINITY : 3
-  const SHOULD_ABORT_REQUESTS = !import.meta.env.DEV
-  const DEBOUNCE_MS = import.meta.env.DEV ? 150 : 300
-
-  // Abort previous in-flight requests when viewport changes rapidly
-  const fetchAbortRef = useRef<AbortController | null>(null)
-  const loadTimerRef = useRef<number | null>(null)
-
-  async function fetchViewportData(map: MapboxMap): Promise<void> {
-    try {
-      // Avoid hammering the API at world/continent zooms
-      if (map.getZoom() < MIN_FETCH_ZOOM) {
-        const routesSrc = map.getSource('routes') as GeoJSONSource
-        if (routesSrc) routesSrc.setData({ type: 'FeatureCollection', features: [] })
-        const waysSrc = map.getSource('ways') as GeoJSONSource
-        if (waysSrc) waysSrc.setData({ type: 'FeatureCollection', features: [] })
-        return
-      }
-
-      // Abort previous requests (disabled in dev to avoid noisy broken pipes)
-      if (SHOULD_ABORT_REQUESTS) {
-        try { fetchAbortRef.current?.abort() } catch {}
-      }
-      const controller = new AbortController()
-      fetchAbortRef.current = SHOULD_ABORT_REQUESTS ? controller : null
-
-      const routesUrl = `${API_BASE}/api/route/?${bboxParamFromMap(map)}&page_size=${PAGE_SIZE}`
-      const waysUrl = `${API_BASE}/api/ways/?${bboxParamFromMap(map)}&page_size=${PAGE_SIZE}`
-      const common: RequestInit = {
-        headers: { Accept: 'application/geo+json, application/json;q=0.9' },
-        signal: SHOULD_ABORT_REQUESTS ? controller.signal : undefined,
-      }
-
-      function normalizeNext(nextUrl: string | null): string | null {
-        if (!nextUrl) return null
-        try {
-          const u = new URL(nextUrl, typeof window !== 'undefined' ? window.location.origin : 'http://localhost')
-          // Force requests through our chosen API base ('' in prod for relative /api)
-          return `${API_BASE}${u.pathname}${u.search}`
-        } catch {
-          // Fallback: if it's already a relative /api path, prefix API_BASE
-          return nextUrl.startsWith('/api/') ? `${API_BASE}${nextUrl}` : nextUrl
-        }
-      }
-
-      async function fetchAllPages(startUrl: string): Promise<GeoJSON.FeatureCollection> {
-        let url: string | null = startUrl
-        const all: GeoJSON.Feature[] = []
-        let pages = 0
-        while (url) {
-          const res = await fetch(url, common)
-          if (!res.ok) break
-          const data = await res.json()
-          const fc = toFeatureCollection(data)
-          all.push(...fc.features)
-          pages += 1
-          if (pages >= MAX_PAGES) { url = null; break }
-          const rawNext = (data && typeof data === 'object' && 'next' in data) ? (data.next as string | null) : null
-          url = normalizeNext(rawNext)
-        }
-        return { type: 'FeatureCollection', features: all }
-      }
-
-      const [routes, ways] = await Promise.all([
-        fetchAllPages(routesUrl),
-        fetchAllPages(waysUrl),
-      ])
-
-      const coloredRoutes: GeoJSON.FeatureCollection = {
-        type: 'FeatureCollection',
-        features: routes.features.map((f) => {
-          const name = (f.properties as any)?.name
-          const color = getRouteColor(name, styleUrl)
-          return { ...f, properties: { ...(f.properties || {}), routeColor: color } }
-        }),
-      }
-
-      const routesSrc = map.getSource('routes') as GeoJSONSource
-      if (routesSrc) routesSrc.setData(coloredRoutes)
-      const waysSrc = map.getSource('ways') as GeoJSONSource
-      if (waysSrc) waysSrc.setData(ways)
-    } catch (err) {
-      // Swallow aborts from rapid viewport changes
-      if ((err as any)?.name === 'AbortError') return
-      // eslint-disable-next-line no-console
-      console.error('Failed to load data', err)
-    }
-  }
+  const API_BASE: string = import.meta.env.DEV ? (envBase ?? 'http://localhost:8000') : ''
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -245,12 +112,6 @@ export function MapView({ initialCenter = [-122.447303, 37.753574], initialZoom 
       } catch {}
     }
 
-    const loadDataForViewport = () => fetchViewportData(map)
-    const scheduleLoad = () => {
-      try { if (loadTimerRef.current != null) window.clearTimeout(loadTimerRef.current) } catch {}
-      loadTimerRef.current = window.setTimeout(() => { loadDataForViewport() }, DEBOUNCE_MS)
-    }
-
     map.on('load', () => {
       addTrailSources(map)
       addTrailLayers(map, { routesVisible: showRoutes, waysVisible: showWays, styleUrl, widthScale })
@@ -258,7 +119,6 @@ export function MapView({ initialCenter = [-122.447303, 37.753574], initialZoom 
       addHoverHighlight(map)
       ensureSelectionHighlightLayers(map)
       addClickPopup(map, API_BASE, (id) => setSelectedTrailId(id))
-      scheduleLoad()
       saveState()
     })
 
@@ -266,8 +126,6 @@ export function MapView({ initialCenter = [-122.447303, 37.753574], initialZoom 
     map.on('zoomend', saveState)
     map.on('rotateend', saveState)
     map.on('pitchend', saveState)
-    map.on('moveend', scheduleLoad)
-    map.on('zoomend', scheduleLoad)
 
     map.on('error', (e) => {
       // eslint-disable-next-line no-console
@@ -276,7 +134,6 @@ export function MapView({ initialCenter = [-122.447303, 37.753574], initialZoom 
 
     return () => {
       try { cleanupResizeRef.current?.() } catch {}
-      try { if (loadTimerRef.current != null) window.clearTimeout(loadTimerRef.current) } catch {}
       map.remove()
       mapRef.current = null
     }
@@ -300,10 +157,6 @@ export function MapView({ initialCenter = [-122.447303, 37.753574], initialZoom 
         if (map.getLayer('Ways-selected')) map.setFilter('Ways-selected', filter as any)
         if (map.getLayer('Route-selected')) map.setFilter('Route-selected', filter as any)
       } catch {}
-      fetchViewportData(map).catch((err: unknown) => {
-        // eslint-disable-next-line no-console
-        console.error('Failed to refresh data after style change', err)
-      })
       try {
         const c = map.getCenter().toArray() as [number, number]
         localStorage.setItem(

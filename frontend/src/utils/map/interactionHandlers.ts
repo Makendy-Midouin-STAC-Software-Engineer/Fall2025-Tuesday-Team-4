@@ -1,12 +1,13 @@
 import type { Map as MapboxMap, MapboxGeoJSONFeature, Popup } from 'mapbox-gl'
 import mapboxgl from 'mapbox-gl'
+import { ROUTES_SOURCE_LAYER, WAYS_SOURCE_LAYER, ID_PROP } from '@/utils/map/vectorTileConfig'
 
 const HOVER_WAYS_LAYER_ID = 'Ways-hover'
 const HOVER_ROUTE_LAYER_ID = 'Route-hover'
 const SELECT_WAYS_LAYER_ID = 'Ways-selected'
 const SELECT_ROUTE_LAYER_ID = 'Route-selected'
 
-function coalesceIdExpr(): any[] { return ['coalesce', ['get', 'osm_id'], ['id']] as any }
+function coalesceIdExpr(): any[] { return ['coalesce', ['get', ID_PROP], ['id']] as any }
 
 export function addHoverHighlight(map: MapboxMap) {
   // Ensure hover layers exist for both sources
@@ -15,6 +16,7 @@ export function addHoverHighlight(map: MapboxMap) {
       id: HOVER_WAYS_LAYER_ID,
       type: 'line',
       source: 'ways',
+      'source-layer': WAYS_SOURCE_LAYER as any,
       layout: { 'line-join': 'round', 'line-cap': 'round' },
       paint: {
         'line-color': '#ffffff',
@@ -30,6 +32,7 @@ export function addHoverHighlight(map: MapboxMap) {
       id: HOVER_ROUTE_LAYER_ID,
       type: 'line',
       source: 'routes',
+      'source-layer': ROUTES_SOURCE_LAYER as any,
       layout: { 'line-join': 'round', 'line-cap': 'round' },
       paint: {
         'line-color': '#ffffff',
@@ -52,7 +55,7 @@ export function addHoverHighlight(map: MapboxMap) {
       return
     }
     const f = features[0]
-    const fid = (f.properties?.osm_id as number | string | undefined) ?? (f.id as number | string | undefined)
+    const fid = (f.properties?.[ID_PROP] as number | string | undefined) ?? (f.id as number | string | undefined)
     if (fid == null) {
       map.setFilter(HOVER_WAYS_LAYER_ID, ['==', coalesceIdExpr(), -1])
       map.setFilter(HOVER_ROUTE_LAYER_ID, ['==', coalesceIdExpr(), -1])
@@ -85,6 +88,7 @@ export function ensureSelectionHighlightLayers(map: MapboxMap) {
       id: SELECT_WAYS_LAYER_ID,
       type: 'line',
       source: 'ways',
+      'source-layer': WAYS_SOURCE_LAYER as any,
       layout: { 'line-join': 'round', 'line-cap': 'round' },
       paint: {
         'line-color': '#FFFFFF',  //34D399 //emarald 400  
@@ -100,6 +104,7 @@ export function ensureSelectionHighlightLayers(map: MapboxMap) {
       id: SELECT_ROUTE_LAYER_ID,
       type: 'line',
       source: 'routes',
+      'source-layer': ROUTES_SOURCE_LAYER as any,
       layout: { 'line-join': 'round', 'line-cap': 'round' },
       paint: {
         'line-color': '#FFFFFF',  //34D399  //34D399 //emarald 400 
@@ -112,9 +117,7 @@ export function ensureSelectionHighlightLayers(map: MapboxMap) {
   }
 }
 
-const metaCache = new Map<string, any>()
-
-export function addClickPopup(map: MapboxMap, apiBase: string, onSelect: (id: number | string | null) => void) {
+export function addClickPopup(map: MapboxMap, _apiBase: string, onSelect: (id: number | string | null) => void) {
   const targetLayers = ['Ways', 'Route']
   let popup: Popup | null = null
 
@@ -130,7 +133,7 @@ export function addClickPopup(map: MapboxMap, apiBase: string, onSelect: (id: nu
 
     const f = features[0]
     const props = (f.properties || {}) as Record<string, any>
-    const id = (props.osm_id as number | string | undefined) ?? (f.id as number | string | undefined) ?? null
+    const id = (props[ID_PROP] as number | string | undefined) ?? (f.id as number | string | undefined) ?? null
     const isRoute = (f.layer?.id || '').includes('Route')
     const kind = isRoute ? 'route' : 'ways'
     onSelect(id)
@@ -150,22 +153,22 @@ export function addClickPopup(map: MapboxMap, apiBase: string, onSelect: (id: nu
       }
     } catch {}
 
-    // Immediate popup with available props (no fetch delay)
+    // Popup uses available tile properties (client-only)
     const initialName = props.name ?? 'N/A'
-    const initialLength = props.length ?? 'N/A'
+    const initialLength = props.length ?? props.length_km ?? (typeof props.length_m === 'number' ? (props.length_m / 1000).toFixed(2) : 'N/A')
     const initialDifficulty = props.difficulty ?? 'N/A'
     const initialRegion = props.region ?? props.location ?? 'N/A'
     const render = (name: any, length: any, difficulty: any, region: any) => `
-      <div class="min-w-[220px]">
+      <div class="min-w-[220px] text-gray-900">
         <div class="mb-1 flex items-center gap-2">
           <div class="h-8 w-8 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500"></div>
-          <div class="font-semibold text-white dark:text-white">${name}</div>
-          <button id="ihike-popup-close" class="ml-auto rounded px-2 text-xs text-white/80 hover:text-white">×</button>
+          <div class="font-semibold">${name}</div>
+          <button id="ihike-popup-close" class="ml-auto rounded px-2 text-xs text-gray-500 hover:text-gray-700">×</button>
         </div>
-        <div class="space-y-1 text-sm text-white/90">
-          <div><span class="text-white/60">Length:</span> ${length} km</div>
-          <div><span class="text-white/60">Difficulty:</span> ${difficulty}</div>
-          <div><span class="text-white/60">Region:</span> ${region}</div>
+        <div class="space-y-1 text-sm text-gray-700">
+          <div><span class="text-gray-500">Length:</span> ${length} km</div>
+          <div><span class="text-gray-500">Difficulty:</span> ${difficulty}</div>
+          <div><span class="text-gray-500">Region:</span> ${region}</div>
         </div>
       </div>`
 
@@ -181,39 +184,7 @@ export function addClickPopup(map: MapboxMap, apiBase: string, onSelect: (id: nu
       if (btn) (btn as HTMLButtonElement).onclick = () => { onSelect(null); popup?.remove(); popup = null }
     } catch {}
 
-    // Hydrate popup with fetched metadata (if still same selection)
-    if (id != null) {
-      const cacheKey = `${kind}:${id}`
-      const updateHtml = (meta: Record<string, any>) => {
-        if (!popup) return
-        const name = meta.name ?? initialName
-        const length = meta.length ?? initialLength
-        const difficulty = meta.difficulty ?? initialDifficulty
-        const region = meta.region ?? initialRegion
-        popup.setHTML(render(name, length, difficulty, region))
-        try {
-          const btn = document.getElementById('ihike-popup-close')
-          if (btn) (btn as HTMLButtonElement).onclick = () => { onSelect(null); popup?.remove(); popup = null }
-        } catch {}
-      }
-
-      if (metaCache.has(cacheKey)) {
-        updateHtml(metaCache.get(cacheKey))
-      } else {
-        fetch(`${apiBase}/api/${kind}/?osm_id=${id}`, { headers: { Accept: 'application/geo+json, application/json;q=0.9' } })
-          .then(res => res.ok ? res.json() : null)
-          .then(j => {
-            if (!j) return null
-            const fc = (j && j.type === 'FeatureCollection') ? j : (j?.results ?? j)
-            const first = Array.isArray(fc?.features) ? fc.features[0] : null
-            const meta = (first?.properties ?? {}) as Record<string, any>
-            metaCache.set(cacheKey, meta)
-            updateHtml(meta)
-            return null
-          })
-          .catch(() => {})
-      }
-    }
+    // No backend hydration; tile properties are authoritative at click time
   })
 }
 

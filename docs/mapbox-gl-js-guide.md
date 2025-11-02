@@ -19,6 +19,9 @@ References:
 
 Environment variables (frontend `.env` in Vercel / local):
 - `VITE_MAPBOX_TOKEN` — Mapbox access token
+  - Local: create `.env.local` with `VITE_MAPBOX_TOKEN=pk.XXXX`
+  - Vercel: Project Settings → Environment Variables → add `VITE_MAPBOX_TOKEN` (Production and Preview)
+  - No rebuild needed for local changes; Vercel requires a redeploy to apply new values
 
 ---
 

@@ -112,7 +112,34 @@ export function waysColorStepExpression(styleUrl: string): any[] {
   const baseStops = ['#A8E6A3', '#C7E98D', '#FFD76A', '#FFB347', '#FF6961']
   const dark = isDarkStyle(styleUrl)
   const stops = dark ? baseStops.map(c => brightenHexBy(c, 0.18)) : baseStops
-  return ['step', ['get', 'length'], stops[0], 1, stops[1], 3, stops[2], 6, stops[3], 10, stops[4]]
+  // Compute length in km without relying on property-existence operators.
+  // Using max of candidate numeric values avoids coalescing nulls to 0 prematurely
+  // while staying expression-compatible across Mapbox versions.
+  const lengthKm: any[] = [
+    'max',
+    ['max', ['to-number', ['get', 'length_km']], ['/', ['to-number', ['get', 'length_m']], 1000]],
+    ['to-number', ['get', 'length']],
+  ]
+  return ['step', lengthKm, stops[0], 1, stops[1], 3, stops[2], 6, stops[3], 10, stops[4]]
+}
+
+// Deterministic route color based on a numeric feature identifier.
+// Uses modulo over the ROUTE_PALETTE length to map ids -> stable colors.
+// We use 'osm_id' from the tiles. If missing or non-numeric, fallback to 0.
+import { ID_PROP } from '@/utils/map/vectorTileConfig'
+
+export function routeColorByIdExpression(): any[] {
+  const palette = ROUTE_PALETTE
+  const paletteLen = palette.length
+  // Build a match expression on (to-number(osm_id) % paletteLen)
+  const cases: any[] = []
+  for (let i = 0; i < paletteLen; i++) { cases.push(i, palette[i]) }
+  return [
+    'match',
+    ['%', ['coalesce', ['to-number', ['get', ID_PROP]], 0], paletteLen],
+    ...cases,
+    palette[paletteLen - 1],
+  ] as any
 }
 
 

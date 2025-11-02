@@ -1,6 +1,7 @@
 import type { Map as MapboxMap, AnyLayer } from 'mapbox-gl'
-import { isDarkStyle, routeWidthExpression, routeHaloWidthExpression, waysWidthExpression, waysColorStepExpression } from '@/utils/map/trailColoring'
+import { isDarkStyle, routeWidthExpression, routeHaloWidthExpression, waysWidthExpression, waysColorStepExpression, routeColorByIdExpression } from '@/utils/map/trailColoring'
 import { ROUTES_SOURCE_ID, WAYS_SOURCE_ID } from '@/utils/map/addTrailSources'
+import { ROUTES_SOURCE_LAYER, WAYS_SOURCE_LAYER } from '@/utils/map/vectorTileConfig'
 
 export const ROUTE_LAYER_ID = 'Route'
 export const ROUTE_HALO_LAYER_ID = 'Route-halo'
@@ -27,6 +28,7 @@ export function addTrailLayers(
       id: ROUTE_HALO_LAYER_ID,
       type: 'line',
       source: ROUTES_SOURCE_ID,
+      'source-layer': ROUTES_SOURCE_LAYER,
       layout: {
         'line-join': 'round',
         'line-cap': 'round',
@@ -52,13 +54,15 @@ export function addTrailLayers(
       id: ROUTE_LAYER_ID,
       type: 'line',
       source: ROUTES_SOURCE_ID,
+      'source-layer': ROUTES_SOURCE_LAYER,
       layout: {
         'line-join': 'round',
         'line-cap': 'round',
         'visibility': routesVisible ? 'visible' : 'none',
       },
       paint: {
-        'line-color': ['coalesce', ['get', 'routeColor'], '#3B82F6'] as any,
+        // Deterministic color per feature using osm_id modulo palette size
+        'line-color': routeColorByIdExpression() as any,
         'line-opacity': 0.8,
         'line-width': routeWidthExpression(widthScale) as any,
         'line-emissive-strength': 1.0 as any,
@@ -79,6 +83,7 @@ export function addTrailLayers(
       id: WAYS_LAYER_ID,
       type: 'line',
       source: WAYS_SOURCE_ID,
+      'source-layer': WAYS_SOURCE_LAYER,
       layout: {
         'line-join': 'round',
         'line-cap': 'round',
