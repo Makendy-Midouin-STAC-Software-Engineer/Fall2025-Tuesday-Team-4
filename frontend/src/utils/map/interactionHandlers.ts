@@ -134,8 +134,6 @@ export function addClickPopup(map: MapboxMap, _apiBase: string, onSelect: (id: n
     const f = features[0]
     const props = (f.properties || {}) as Record<string, any>
     const id = (props[ID_PROP] as number | string | undefined) ?? (f.id as number | string | undefined) ?? null
-    const isRoute = (f.layer?.id || '').includes('Route')
-    const kind = isRoute ? 'route' : 'ways'
     onSelect(id)
 
     // Simple fly-to center of geometry at fixed zoom for all trails
