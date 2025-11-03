@@ -26,8 +26,6 @@ a:hover {
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
   min-width: 320px;
   min-height: 100vh;
 }
@@ -68,3 +66,23 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+
+/* Utility: Jersey 15 font */
+.font-jersey {
+  font-family: "Jersey 15", sans-serif;
+}
+
+/* Utility: glass background card with subtle shadow */
+.glass {
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0.20) 0%, rgba(0, 0, 0, 0.20) 100%),
+              linear-gradient(129deg, rgba(45, 45, 45, 0.70) 12.49%, rgba(0, 0, 0, 0.40) 91.74%);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+}
+
+/* Minimal range styling for modern look */
+input[type="range"] {
+  accent-color: #8B5CF6;
+}
+

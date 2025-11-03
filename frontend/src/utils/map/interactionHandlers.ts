@@ -1,6 +1,6 @@
-import type { Map as MapboxMap, MapboxGeoJSONFeature, Popup } from 'mapbox-gl'
-import mapboxgl from 'mapbox-gl'
+import type { Map as MapboxMap, MapboxGeoJSONFeature } from 'mapbox-gl'
 import { ROUTES_SOURCE_LAYER, WAYS_SOURCE_LAYER, ID_PROP } from '@/utils/map/vectorTileConfig'
+import type { TrailSummary } from '@/types/trail'
 
 const HOVER_WAYS_LAYER_ID = 'Ways-hover'
 const HOVER_ROUTE_LAYER_ID = 'Route-hover'
@@ -117,9 +117,8 @@ export function ensureSelectionHighlightLayers(map: MapboxMap) {
   }
 }
 
-export function addClickPopup(map: MapboxMap, _apiBase: string, onSelect: (id: number | string | null) => void) {
+export function wireClickSelection(map: MapboxMap, onSelect: (trail: TrailSummary | null) => void) {
   const targetLayers = ['Ways', 'Route']
-  let popup: Popup | null = null
 
   map.on('click', (e) => {
     const features = map.queryRenderedFeatures(e.point, { layers: targetLayers }) as MapboxGeoJSONFeature[]
@@ -127,14 +126,46 @@ export function addClickPopup(map: MapboxMap, _apiBase: string, onSelect: (id: n
     // Clicked off-trail: clear selection and close popup
     if (!features.length) {
       onSelect(null)
-      if (popup) { popup.remove(); popup = null }
       return
     }
 
     const f = features[0]
     const props = (f.properties || {}) as Record<string, any>
-    const id = (props[ID_PROP] as number | string | undefined) ?? (f.id as number | string | undefined) ?? null
-    onSelect(id)
+    const id = (props[ID_PROP] as number | string | undefined) ?? (f.id as number | string | undefined)
+    if (id == null) {
+      onSelect(null)
+      return
+    }
+
+    const toNumber = (val: unknown): number | null => {
+      if (typeof val === 'number' && Number.isFinite(val)) return val
+      if (typeof val === 'string') {
+        const parsed = Number(val)
+        if (Number.isFinite(parsed)) return parsed
+      }
+      return null
+    }
+
+    const lengthDirectKm = toNumber(props.length_km ?? props.lengthKm)
+    const lengthMeters = toNumber(props.length_m ?? props.lengthMeters)
+    const lengthFallback = toNumber(props.length)
+    const lengthKm = lengthDirectKm ?? (lengthMeters != null ? lengthMeters / 1000 : null) ?? lengthFallback
+
+    const difficulty = typeof props.difficulty === 'string' ? props.difficulty : null
+    const website = typeof props.website === 'string' ? props.website : null
+    const name = typeof props.name === 'string' ? props.name : null
+    const type: 'Route' | 'Way' = (f.layer?.id || '').includes('Route') ? 'Route' : 'Way'
+
+    const summary: TrailSummary = {
+      id,
+      name,
+      type,
+      lengthKm,
+      difficulty,
+      website,
+    }
+
+    onSelect(summary)
 
     // Simple fly-to center of geometry at fixed zoom for all trails
     try {
@@ -150,40 +181,17 @@ export function addClickPopup(map: MapboxMap, _apiBase: string, onSelect: (id: n
         map.easeTo({ center: [cx, cy] as any, zoom: 10, duration: 800 })
       }
     } catch {}
-
-    // Popup uses available tile properties (client-only)
-    const initialName = props.name ?? 'N/A'
-    const initialLength = props.length ?? props.length_km ?? (typeof props.length_m === 'number' ? (props.length_m / 1000).toFixed(2) : 'N/A')
-    const initialDifficulty = props.difficulty ?? 'N/A'
-    const initialRegion = props.region ?? props.location ?? 'N/A'
-    const render = (name: any, length: any, difficulty: any, region: any) => `
-      <div class="min-w-[220px] text-gray-900">
-        <div class="mb-1 flex items-center gap-2">
-          <div class="h-8 w-8 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500"></div>
-          <div class="font-semibold">${name}</div>
-          <button id="ihike-popup-close" class="ml-auto rounded px-2 text-xs text-gray-500 hover:text-gray-700">×</button>
-        </div>
-        <div class="space-y-1 text-sm text-gray-700">
-          <div><span class="text-gray-500">Length:</span> ${length} km</div>
-          <div><span class="text-gray-500">Difficulty:</span> ${difficulty}</div>
-          <div><span class="text-gray-500">Region:</span> ${region}</div>
-        </div>
-      </div>`
-
-    if (popup) popup.remove()
-    popup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, offset: 12 })
-      .setLngLat(e.lngLat)
-      .setHTML(render(initialName, initialLength, initialDifficulty, initialRegion))
-      .addTo(map)
-
-    // Close button: close popup and clear selection
-    try {
-      const btn = document.getElementById('ihike-popup-close')
-      if (btn) (btn as HTMLButtonElement).onclick = () => { onSelect(null); popup?.remove(); popup = null }
-    } catch {}
-
-    // No backend hydration; tile properties are authoritative at click time
   })
+}
+
+export function syncSelectionFilter(map: MapboxMap, selectedId: string | number | null) {
+  const filter = selectedId != null
+    ? ['==', ['coalesce', ['get', ID_PROP], ['id']], selectedId]
+    : ['==', ['coalesce', ['get', ID_PROP], ['id']], -1]
+  try {
+    if (map.getLayer('Ways-selected')) map.setFilter('Ways-selected', filter as any)
+    if (map.getLayer('Route-selected')) map.setFilter('Route-selected', filter as any)
+  } catch {}
 }
 
 export function addZoomDependentStyling(_map: MapboxMap) {

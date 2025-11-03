@@ -1,36 +1,23 @@
-from rest_framework import viewsets, permissions
-from rest_framework_gis.filters import InBBoxFilter
-from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework.filters import OrderingFilter
-from .models import Route, Ways
-from .serializers import RouteSerializer, WaysSerializer
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+import logging
 
 
-class RouteViewSet(viewsets.ReadOnlyModelViewSet):
-    permission_classes = [permissions.AllowAny]
-    queryset = Route.objects.all().order_by("name")
-    serializer_class = RouteSerializer
-    filter_backends = [DjangoFilterBackend, InBBoxFilter, OrderingFilter]
-    filterset_fields = {
-        "osm_id": ["exact", "in"],
-        "difficulty": ["exact", "in"],
-        "route": ["exact", "in"],
-        "length": ["gte", "lte"],
-    }
-    bbox_filter_field = "geometry"
-    ordering_fields = ["name", "length"]
+logger = logging.getLogger(__name__)
 
 
-class WaysViewSet(viewsets.ReadOnlyModelViewSet):
-    permission_classes = [permissions.AllowAny]
-    queryset = Ways.objects.all().order_by("name")
-    serializer_class = WaysSerializer
-    filter_backends = [DjangoFilterBackend, InBBoxFilter, OrderingFilter]
-    filterset_fields = {
-        "osm_id": ["exact", "in"],
-        "difficulty": ["exact", "in"],
-        "highway": ["exact", "in"],
-        "length": ["gte", "lte"],
-    }
-    bbox_filter_field = "geometry"
-    ordering_fields = ["name", "length"]
+@api_view(["GET", "POST", "PUT", "PATCH", "DELETE"])
+def deprecated_gone(request, *args, **kwargs):
+    logger.warning(
+        "Trails endpoint hit after deprecation",
+        extra={
+            "user_id": getattr(request.user, "id", None),
+            "path": request.path,
+            "method": request.method,
+        },
+    )
+    return Response(
+        {"detail": "Trails API removed. Use vector tiles."},
+        status=status.HTTP_410_GONE,
+    )

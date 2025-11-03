@@ -108,18 +108,19 @@ export function routeHaloWidthExpression(scale: number): any[] {
 }
 
 // Ways color expression (step) with optional dark-style brightening
-export function waysColorStepExpression(styleUrl: string): any[] {
-  const baseStops = ['#A8E6A3', '#C7E98D', '#FFD76A', '#FFB347', '#FF6961']
-  const dark = isDarkStyle(styleUrl)
-  const stops = dark ? baseStops.map(c => brightenHexBy(c, 0.18)) : baseStops
-  // Compute length in km without relying on property-existence operators.
-  // Using max of candidate numeric values avoids coalescing nulls to 0 prematurely
-  // while staying expression-compatible across Mapbox versions.
-  const lengthKm: any[] = [
+export function lengthKmExpression(): any[] {
+  return [
     'max',
     ['max', ['to-number', ['get', 'length_km']], ['/', ['to-number', ['get', 'length_m']], 1000]],
     ['to-number', ['get', 'length']],
   ]
+}
+
+export function waysColorStepExpression(styleUrl: string): any[] {
+  const baseStops = ['#8BC34A', '#FFD54F', '#FFB347', '#FF7043', '#E53935']
+  const dark = isDarkStyle(styleUrl)
+  const stops = dark ? baseStops.map(c => brightenHexBy(c, 0.18)) : baseStops
+  const lengthKm = lengthKmExpression()
   return ['step', lengthKm, stops[0], 1, stops[1], 3, stops[2], 6, stops[3], 10, stops[4]]
 }
 

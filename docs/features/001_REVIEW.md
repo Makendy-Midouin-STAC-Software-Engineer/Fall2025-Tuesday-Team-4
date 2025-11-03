@@ -1,16 +1,15 @@
-## iHike Backend Code Review — 001
+## iHike Backend Code Review — 001 (Historical)
 
-Scope: Review of Django + DRF(+GIS) backend per docs/commands/code_review.md (L3–L10): plan alignment, bugs, data alignment, over‑engineering, and style. Findings include concrete, minimal actions.
+Note: The trails/GeoJSON API described below has since been deprecated and removed in favor of Mapbox vector tiles rendered on the frontend. Backend endpoints `/api/trails`, `/api/paths`, `/api/route`, and `/api/ways` now return HTTP 410 when `TRAILS_API_DEPRECATED=true` (default).
 
-### Plan alignment
-- Interactive GeoJSON API: Implemented via `GeoFeatureModelSerializer` and `/api/trails`, `/api/paths` endpoints. Geometry SRID 4326 is correct for Mapbox.
-- Data model fields: `osm_id`, `name`, `route`/`highway`, `length`, `website`, and derived `difficulty` present. Original `sac_scale` not stored.
-- Import workflow: Provided management command to ingest both `hiking_route.geojson` and `hiking_ways.geojson` with validation and geodesic length computation.
+Scope: Historical review of Django + DRF(+GIS) backend per docs/commands/code_review.md: plan alignment, data alignment, and style at the time.
 
-Gaps vs brief:
-- Filtering/search (difficulty, length, region/bbox) not implemented.
-- CORS for frontend (Vercel) not configured.
-- Public write operations currently enabled.
+### Plan alignment (historical)
+- GeoJSON API was implemented via `GeoFeatureModelSerializer` and trails endpoints. Geometry SRID 4326 was correct for Mapbox.
+- Data model fields: `osm_id`, `name`, `route`/`highway`, `length`, `website`, and derived `difficulty` were present.
+- Import workflow: A management command ingested `hiking_route.geojson` and `hiking_ways.geojson` with validation and geodesic length computation.
+
+Since the API is deprecated, recommendations below are retained only for context and are not action items.
 
 ### Critical issues (fix first)
 1) Public write access on API

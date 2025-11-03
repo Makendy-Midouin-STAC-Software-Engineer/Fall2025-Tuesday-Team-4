@@ -2,79 +2,48 @@ import { useEffect, useRef, useState } from 'react'
 import type { Map as MapboxMap, LngLatLike, MapboxOptions } from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 
-import { LayerToggles } from '@/components/map/LayerToggles'
+import { TopBarControls } from '@/components/overlay/TopBarControls'
+import { WaysLegend } from '@/components/legend/WaysLegend'
+import { TrailInfoPanel } from '@/components/panels/TrailInfoPanel'
+import { Logo } from '@/components/branding/Logo'
 import { initMap, attachResizeHandlers } from '@/utils/map/initMap'
 import { updateBaseStyle } from '@/utils/map/updateBaseStyle'
 import { addTrailSources } from '@/utils/map/addTrailSources'
 import { addTrailLayers, ROUTE_HALO_LAYER_ID, ROUTE_LAYER_ID, WAYS_LAYER_ID } from '@/utils/map/addTrailLayers'
-import { addHoverHighlight, addClickPopup, ensureSelectionHighlightLayers } from '@/utils/map/interactionHandlers'
+import { addHoverHighlight, ensureSelectionHighlightLayers, syncSelectionFilter, wireClickSelection } from '@/utils/map/interactionHandlers'
 import { DARK_STYLE, OUTDOORS_STYLE, isDarkStyle, routeHaloWidthExpression, routeWidthExpression, waysWidthExpression } from '@/utils/map/trailColoring'
+import { initialStyleFromStorage, initialTogglesFromStorage, loadSavedState, saveViewState } from '@/utils/map/persistence'
+import type { ViewPreferences } from '@/utils/map/persistence'
+import { applyWaysLegendFilter, WAYS_LEGEND_BUCKETS } from '@/utils/map/waysLegend'
+import type { TrailSummary } from '@/types/trail'
 
 interface MapViewProps {
   initialCenter?: LngLatLike
   initialZoom?: number
 }
 
-const STORAGE_KEY = 'ihike-map-state-v1'
-
-interface SavedMapState {
-  center: [number, number]
-  zoom: number
-  bearing: number
-  pitch: number
-  style: string
-  showRoutes: boolean
-  showWays: boolean
-}
-
-function loadSavedState(): SavedMapState | null {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return null
-    return JSON.parse(raw) as SavedMapState
-  } catch {
-    return null
-  }
-}
-
-function initialStyleFromStorage(defaultStyle: string): string {
-  const saved = loadSavedState()
-  if (saved && (saved.style === DARK_STYLE || saved.style === OUTDOORS_STYLE)) return saved.style
-  return defaultStyle
-}
-
-function initialTogglesFromStorage() {
-  const saved = loadSavedState()
-  return {
-    showRoutes: saved?.showRoutes ?? true,
-    showWays: saved?.showWays ?? true,
-  }
-}
-
-// No backend GeoJSON fetching; vector tiles supply trail data
-
 export function MapView({ initialCenter = [-122.447303, 37.753574], initialZoom = 10 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<MapboxMap | null>(null)
   const cleanupResizeRef = useRef<(() => void) | null>(null)
+  const viewStateRef = useRef<ViewPreferences>({ style: DARK_STYLE, showRoutes: true, showWays: true })
+
   const [styleUrl, setStyleUrl] = useState<string>(() => initialStyleFromStorage(DARK_STYLE))
-  const [showRoutes, setShowRoutes] = useState<boolean>(() => initialTogglesFromStorage().showRoutes)
-  const [showWays, setShowWays] = useState<boolean>(() => initialTogglesFromStorage().showWays)
+  const initialToggles = initialTogglesFromStorage(true, true)
+  const [showRoutes, setShowRoutes] = useState<boolean>(initialToggles.showRoutes)
+  const [showWays, setShowWays] = useState<boolean>(initialToggles.showWays)
   const [widthScale, setWidthScale] = useState<number>(1)
   const [affectRoutes, setAffectRoutes] = useState<boolean>(true)
   const [affectWays, setAffectWays] = useState<boolean>(true)
   const [terrainExaggeration, setTerrainExaggeration] = useState<number>(1)
-  const [selectedTrailId, setSelectedTrailId] = useState<string | number | null>(null)
-
-  const envBase = import.meta.env.VITE_API_BASE_URL as string | undefined
-  const API_BASE: string = import.meta.env.DEV ? (envBase ?? 'http://localhost:8000') : ''
+  const [legendOpen, setLegendOpen] = useState<boolean>(true)
+  const [legendSelections, setLegendSelections] = useState<boolean[]>(() => WAYS_LEGEND_BUCKETS.map(() => true))
+  const [selectedTrail, setSelectedTrail] = useState<TrailSummary | null>(null)
 
   useEffect(() => {
-    if (!containerRef.current) return
-    if (mapRef.current) return
+    if (!containerRef.current || mapRef.current) return
 
     const saved = loadSavedState()
-
     const options: Partial<MapboxOptions> = {
       style: styleUrl,
       center: (saved?.center ?? initialCenter) as LngLatLike,
@@ -92,44 +61,32 @@ export function MapView({ initialCenter = [-122.447303, 37.753574], initialZoom 
       return
     }
     mapRef.current = map
+    viewStateRef.current = { style: styleUrl, showRoutes, showWays }
 
-    // Resize handling
     cleanupResizeRef.current = attachResizeHandlers(map, containerRef.current)
 
-    const saveState = () => {
-      try {
-        const c = map.getCenter().toArray() as [number, number]
-        const state: SavedMapState = {
-          center: c,
-          zoom: map.getZoom(),
-          bearing: map.getBearing(),
-          pitch: map.getPitch(),
-          style: styleUrl,
-          showRoutes,
-          showWays,
-        }
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
-      } catch {}
+    const persist = () => {
+      saveViewState(map, viewStateRef.current)
     }
 
     map.on('load', () => {
       addTrailSources(map)
       addTrailLayers(map, { routesVisible: showRoutes, waysVisible: showWays, styleUrl, widthScale })
-      // Apply interactions
       addHoverHighlight(map)
       ensureSelectionHighlightLayers(map)
-      addClickPopup(map, API_BASE, (id) => setSelectedTrailId(id))
-      saveState()
+      wireClickSelection(map, (trail) => setSelectedTrail(trail))
+      applyWaysLegendFilter(map, legendSelections, showWays)
+      persist()
     })
 
-    map.on('moveend', saveState)
-    map.on('zoomend', saveState)
-    map.on('rotateend', saveState)
-    map.on('pitchend', saveState)
+    map.on('moveend', persist)
+    map.on('zoomend', persist)
+    map.on('rotateend', persist)
+    map.on('pitchend', persist)
 
-    map.on('error', (e) => {
+    map.on('error', (event) => {
       // eslint-disable-next-line no-console
-      console.error('Mapbox error', e.error?.message ? e.error : e)
+      console.error('Mapbox error', event.error?.message ? event.error : event)
     })
 
     return () => {
@@ -139,82 +96,45 @@ export function MapView({ initialCenter = [-122.447303, 37.753574], initialZoom 
     }
   }, [])
 
-  // Style switch effect
+  useEffect(() => {
+    viewStateRef.current = { style: styleUrl, showRoutes, showWays }
+  }, [styleUrl, showRoutes, showWays])
+
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
     updateBaseStyle(map, styleUrl, { routesVisible: showRoutes, waysVisible: showWays, widthScale })
     map.once('style.load', () => {
-      // Re-wire interactions after style swap
       addHoverHighlight(map)
       ensureSelectionHighlightLayers(map)
-      addClickPopup(map, API_BASE, (id) => setSelectedTrailId(id))
-      // Re-apply selection filter
-      try {
-        const filter = selectedTrailId != null
-          ? ['==', ['coalesce', ['get', 'osm_id'], ['id']], selectedTrailId]
-          : ['==', ['coalesce', ['get', 'osm_id'], ['id']], -1]
-        if (map.getLayer('Ways-selected')) map.setFilter('Ways-selected', filter as any)
-        if (map.getLayer('Route-selected')) map.setFilter('Route-selected', filter as any)
-      } catch {}
-      try {
-        const c = map.getCenter().toArray() as [number, number]
-        localStorage.setItem(
-          STORAGE_KEY,
-          JSON.stringify({
-            center: c,
-            zoom: map.getZoom(),
-            bearing: map.getBearing(),
-            pitch: map.getPitch(),
-            style: styleUrl,
-            showRoutes,
-            showWays,
-          })
-        )
-      } catch {}
+      wireClickSelection(map, (trail) => setSelectedTrail(trail))
+      applyWaysLegendFilter(map, legendSelections, showWays)
+      syncSelectionFilter(map, selectedTrail?.id ?? null)
+      saveViewState(map, viewStateRef.current)
     })
   }, [styleUrl])
 
-  // Selection highlight filter sync
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
-    try {
-      const filter = selectedTrailId != null
-        ? ['==', ['coalesce', ['get', 'osm_id'], ['id']], selectedTrailId]
-        : ['==', ['coalesce', ['get', 'osm_id'], ['id']], -1]
-      if (map.getLayer('Ways-selected')) map.setFilter('Ways-selected', filter as any)
-      if (map.getLayer('Route-selected')) map.setFilter('Route-selected', filter as any)
-    } catch {}
-  }, [selectedTrailId])
+    syncSelectionFilter(map, selectedTrail?.id ?? null)
+  }, [selectedTrail])
 
-  // Visibility toggles
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
     try {
       if (map.getLayer(ROUTE_LAYER_ID)) map.setLayoutProperty(ROUTE_LAYER_ID, 'visibility', showRoutes ? 'visible' : 'none')
-      if (map.getLayer(ROUTE_HALO_LAYER_ID)) map.setLayoutProperty(ROUTE_HALO_LAYER_ID, 'visibility', isDarkStyle(styleUrl) && showRoutes ? 'visible' : 'none')
+      if (map.getLayer(ROUTE_HALO_LAYER_ID)) {
+        const visible = isDarkStyle(styleUrl) && showRoutes ? 'visible' : 'none'
+        map.setLayoutProperty(ROUTE_HALO_LAYER_ID, 'visibility', visible)
+      }
       if (map.getLayer(WAYS_LAYER_ID)) map.setLayoutProperty(WAYS_LAYER_ID, 'visibility', showWays ? 'visible' : 'none')
     } catch {}
-    try {
-      const c = map.getCenter().toArray() as [number, number]
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          center: c,
-          zoom: map.getZoom(),
-          bearing: map.getBearing(),
-          pitch: map.getPitch(),
-          style: styleUrl,
-          showRoutes,
-          showWays,
-        })
-      )
-    } catch {}
+    applyWaysLegendFilter(map, legendSelections, showWays)
+    saveViewState(map, viewStateRef.current)
   }, [showRoutes, showWays])
 
-  // Width scaling effect (keep zoom at top-level)
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
@@ -231,15 +151,6 @@ export function MapView({ initialCenter = [-122.447303, 37.753574], initialZoom 
     } catch {}
   }, [widthScale, affectRoutes, affectWays])
 
-  function handleToggleStyle() {
-    setStyleUrl((prev) => (prev === DARK_STYLE ? OUTDOORS_STYLE : DARK_STYLE))
-  }
-
-  function handleResetWidths() {
-    setWidthScale(1)
-  }
-
-  // Terrain exaggeration effect
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
@@ -248,59 +159,93 @@ export function MapView({ initialCenter = [-122.447303, 37.753574], initialZoom 
     } catch {}
   }, [terrainExaggeration])
 
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    applyWaysLegendFilter(map, legendSelections, showWays)
+  }, [legendSelections])
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSelectedTrail(null)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
+  function handleToggleStyle() {
+    setStyleUrl((prev) => (prev === DARK_STYLE ? OUTDOORS_STYLE : DARK_STYLE))
+  }
+
+  function handleResetWidths() {
+    setWidthScale(1)
+    setAffectRoutes(true)
+    setAffectWays(true)
+  }
+
+  function handleToggleLegendBucket(index: number) {
+    setLegendSelections((prev) => {
+      const next = prev.map((value, idx) => (idx === index ? !value : value))
+      const hasSelection = next.some(Boolean)
+      if (!hasSelection) {
+        setShowWays(false)
+      } else if (!showWays) {
+        setShowWays(true)
+      }
+      return next
+    })
+  }
+
+  function handleSelectAllBuckets() {
+    setLegendSelections(WAYS_LEGEND_BUCKETS.map(() => true))
+    setShowWays(true)
+  }
+
+  function handleClearBuckets() {
+    setLegendSelections(WAYS_LEGEND_BUCKETS.map(() => false))
+    setShowWays(false)
+  }
+
   return (
-    <div className="relative h-screen w-screen">
+    <div className="relative h-screen w-screen bg-black">
       <div ref={containerRef} className="h-full w-full" />
-      <div className="absolute left-4 top-4 z-10 flex gap-2">
-        <button
-          className="rounded-md bg-black/70 px-3 py-2 text-xs font-medium text-white shadow hover:bg-black/80"
-          onClick={handleToggleStyle}
-        >
-          {styleUrl === DARK_STYLE ? 'Switch to Outdoors' : 'Switch to Dark'}
-        </button>
-        <LayerToggles
-          showRoutes={showRoutes}
-          showWays={showWays}
-          onToggleRoutes={() => setShowRoutes(v => !v)}
-          onToggleWays={() => setShowWays(v => !v)}
-        />
-        <div className="flex items-center gap-2 rounded-md bg-black/60 px-3 py-2 text-white">
-          <label htmlFor="width-scale" className="text-xs">Width</label>
-          <input
-            id="width-scale"
-            type="range"
-            min={0.5}
-            max={3}
-            step={0.1}
-            value={widthScale}
-            onChange={(e) => setWidthScale(parseFloat(e.target.value))}
-            className="h-1 w-28 cursor-pointer accent-purple-400"
+
+      <Logo />
+
+      <div className="pointer-events-none absolute left-6 top-6 z-20 flex flex-col items-start gap-4">
+        <div className="pointer-events-auto inline-flex w-max">
+          <TopBarControls
+            isDarkStyle={styleUrl === DARK_STYLE}
+            onToggleStyle={handleToggleStyle}
+            showRoutes={showRoutes}
+            showWays={showWays}
+            onToggleRoutes={() => setShowRoutes((value) => !value)}
+            onToggleWays={() => setShowWays((value) => !value)}
+            widthScale={widthScale}
+            onChangeWidth={setWidthScale}
+            affectRoutes={affectRoutes}
+            affectWays={affectWays}
+            onToggleAffectRoutes={setAffectRoutes}
+            onToggleAffectWays={setAffectWays}
+            onResetWidths={handleResetWidths}
+            terrainExaggeration={terrainExaggeration}
+            onChangeTerrain={setTerrainExaggeration}
+            onResetTerrain={() => setTerrainExaggeration(1)}
           />
-          <span className="w-8 text-right text-[10px] tabular-nums">{widthScale.toFixed(1)}x</span>
-          <div className="ml-2 flex items-center gap-2">
-            <label className="flex items-center gap-1 text-[10px]"><input type="checkbox" checked={affectRoutes} onChange={(e) => setAffectRoutes(e.target.checked)} />Route</label>
-            <label className="flex items-center gap-1 text-[10px]"><input type="checkbox" checked={affectWays} onChange={(e) => setAffectWays(e.target.checked)} />Ways</label>
-          </div>
-          <button onClick={handleResetWidths} className="ml-2 rounded bg-purple-600 px-2 py-1 text-[10px] font-medium hover:bg-purple-700">Reset</button>
         </div>
-        <div className="flex items-center gap-2 rounded-md bg-black/60 px-3 py-2 text-white">
-          <label htmlFor="terrain-scale" className="text-xs">Terrain</label>
-          <input
-            id="terrain-scale"
-            type="range"
-            min={0}
-            max={3}
-            step={0.1}
-            value={terrainExaggeration}
-            onChange={(e) => setTerrainExaggeration(parseFloat(e.target.value))}
-            className="h-1 w-28 cursor-pointer accent-emerald-400"
+        <div className="pointer-events-auto inline-flex w-max">
+          <WaysLegend
+            isOpen={legendOpen}
+            onOpenChange={setLegendOpen}
+            buckets={legendSelections}
+            onToggleBucket={handleToggleLegendBucket}
+            onSelectAll={handleSelectAllBuckets}
+            onClearAll={handleClearBuckets}
           />
-          <span className="w-8 text-right text-[10px] tabular-nums">{terrainExaggeration.toFixed(1)}x</span>
-          <button onClick={() => setTerrainExaggeration(1)} className="ml-2 rounded bg-emerald-600 px-2 py-1 text-[10px] font-medium hover:bg-emerald-700">Reset</button>
         </div>
       </div>
+
+      <TrailInfoPanel open={Boolean(selectedTrail)} trail={selectedTrail} onClose={() => setSelectedTrail(null)} />
     </div>
   )
 }
-
-

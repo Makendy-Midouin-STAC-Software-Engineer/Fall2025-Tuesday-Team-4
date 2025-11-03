@@ -264,3 +264,11 @@ CORS_ALLOW_CREDENTIALS = os.getenv("CORS_ALLOW_CREDENTIALS", "false").lower() in
 # If no specific origins are set, allow all in development when DEBUG is true
 if DEBUG and not CORS_ALLOWED_ORIGINS:
     CORS_ALLOW_ALL_ORIGINS = True
+
+# Trails API deprecation flag (default enabled)
+TRAILS_API_DEPRECATED = os.getenv("TRAILS_API_DEPRECATED", "true").lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
