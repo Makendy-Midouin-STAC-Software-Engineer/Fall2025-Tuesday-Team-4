@@ -15,12 +15,11 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 
-from django.contrib import admin
-from django.urls import path, include
+from django.urls import path
 from django.http import JsonResponse
-from rest_framework.routers import DefaultRouter
-from django.conf import settings
 from hiking.views import deprecated_gone
+from django.apps import apps
+from django.contrib import admin
 
 
 def health(_request):
@@ -30,28 +29,17 @@ def health(_request):
 urlpatterns = [
     path("", health, name="root-health"),
     path("health/", health, name="health"),
-    path("admin/", admin.site.urls),
 ]
 
-if not getattr(settings, "TRAILS_API_DEPRECATED", False):
-    # Import viewsets only when not deprecated to avoid hard dependency
-    from hiking.views import RouteViewSet, WaysViewSet  # type: ignore
+if apps.is_installed("django.contrib.admin"):
+    urlpatterns.append(path("admin/", admin.site.urls))
 
-    router = DefaultRouter()
-    router.register(r"route", RouteViewSet, basename="route")
-    router.register(r"ways", WaysViewSet, basename="ways")
-    # Backward-compatible routes (deprecated): keep old endpoints working
-    router.register(r"trails", RouteViewSet, basename="trails_legacy")
-    router.register(r"paths", WaysViewSet, basename="paths_legacy")
-    urlpatterns += [path("api/", include(router.urls))]
-else:
+for endpoint in ("route", "ways", "trails", "paths"):
     urlpatterns += [
-        path("api/route/", deprecated_gone),
-        path("api/route/<path:any>", deprecated_gone),
-        path("api/ways/", deprecated_gone),
-        path("api/ways/<path:any>", deprecated_gone),
-        path("api/trails/", deprecated_gone),
-        path("api/trails/<path:any>", deprecated_gone),
-        path("api/paths/", deprecated_gone),
-        path("api/paths/<path:any>", deprecated_gone),
+        path(f"api/{endpoint}/", deprecated_gone, name=f"deprecated-{endpoint}"),
+        path(
+            f"api/{endpoint}/<path:any>",
+            deprecated_gone,
+            name=f"deprecated-{endpoint}-detail",
+        ),
     ]

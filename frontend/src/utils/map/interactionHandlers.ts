@@ -82,6 +82,71 @@ export function addHoverHighlight(map: MapboxMap) {
   })
 }
 
+function toNumber(val: unknown): number | null {
+  if (typeof val === 'number' && Number.isFinite(val)) return val
+  if (typeof val === 'string') {
+    const parsed = Number(val)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return null
+}
+
+function isFeatureRoute(f: MapboxGeoJSONFeature): boolean {
+  return (f.layer?.id || '').includes('Route')
+}
+
+function getFeatureId(f: MapboxGeoJSONFeature): string | number | null {
+  const raw = (f.properties?.[ID_PROP] as unknown) ?? (f.id as unknown)
+  if (typeof raw === 'string' || typeof raw === 'number') return raw
+  return null
+}
+
+export function featureToTrailSummary(f: MapboxGeoJSONFeature): TrailSummary | null {
+  const id = getFeatureId(f)
+  if (id == null) return null
+  const props = (f.properties || {}) as Record<string, any>
+
+  const lengthDirectKm = toNumber(props.length_km ?? props.lengthKm)
+  const lengthMeters = toNumber(props.length_m ?? props.lengthMeters)
+  const lengthFallback = toNumber(props.length)
+  const lengthKm = lengthDirectKm ?? (lengthMeters != null ? lengthMeters / 1000 : null) ?? lengthFallback
+
+  const difficulty = typeof props.difficulty === 'string' ? props.difficulty : null
+  const website = typeof props.website === 'string' ? props.website : null
+  const name = typeof props.name === 'string' ? props.name : null
+  const type: 'Route' | 'Way' = isFeatureRoute(f) ? 'Route' : 'Way'
+
+  return { id, name, type, lengthKm, difficulty, website }
+}
+
+export function flyToFeature(map: MapboxMap, f: MapboxGeoJSONFeature, minZoom = 8) {
+  try {
+    const geometryCoords = (f.geometry as any)?.coordinates
+    if (!Array.isArray(geometryCoords)) return
+    const flattened = geometryCoords.flat(2) as number[]
+    if (!Array.isArray(flattened) || flattened.length < 2) return
+
+    const [minx, miny, maxx, maxy] = flattened.reduce<[number, number, number, number]>((acc, value, index) => {
+      if (index % 2 === 0) {
+        acc[0] = Math.min(acc[0], value)
+        acc[2] = Math.max(acc[2], value)
+      } else {
+        acc[1] = Math.min(acc[1], value)
+        acc[3] = Math.max(acc[3], value)
+      }
+      return acc
+    }, [Infinity, Infinity, -Infinity, -Infinity])
+
+    if (!Number.isFinite(minx) || !Number.isFinite(miny) || !Number.isFinite(maxx) || !Number.isFinite(maxy)) return
+
+    const centerLng = (minx + maxx) / 2
+    const centerLat = (miny + maxy) / 2
+    const currentZoom = map.getZoom()
+    const targetZoom = currentZoom >= minZoom ? currentZoom : minZoom
+    map.flyTo({ center: [centerLng, centerLat] as any, zoom: targetZoom, duration: 1000, essential: true })
+  } catch {}
+}
+
 export function ensureSelectionHighlightLayers(map: MapboxMap) {
   if (map.getSource('ways') && !map.getLayer(SELECT_WAYS_LAYER_ID)) {
     map.addLayer({
@@ -130,57 +195,10 @@ export function wireClickSelection(map: MapboxMap, onSelect: (trail: TrailSummar
     }
 
     const f = features[0]
-    const props = (f.properties || {}) as Record<string, any>
-    const id = (props[ID_PROP] as number | string | undefined) ?? (f.id as number | string | undefined)
-    if (id == null) {
-      onSelect(null)
-      return
-    }
-
-    const toNumber = (val: unknown): number | null => {
-      if (typeof val === 'number' && Number.isFinite(val)) return val
-      if (typeof val === 'string') {
-        const parsed = Number(val)
-        if (Number.isFinite(parsed)) return parsed
-      }
-      return null
-    }
-
-    const lengthDirectKm = toNumber(props.length_km ?? props.lengthKm)
-    const lengthMeters = toNumber(props.length_m ?? props.lengthMeters)
-    const lengthFallback = toNumber(props.length)
-    const lengthKm = lengthDirectKm ?? (lengthMeters != null ? lengthMeters / 1000 : null) ?? lengthFallback
-
-    const difficulty = typeof props.difficulty === 'string' ? props.difficulty : null
-    const website = typeof props.website === 'string' ? props.website : null
-    const name = typeof props.name === 'string' ? props.name : null
-    const type: 'Route' | 'Way' = (f.layer?.id || '').includes('Route') ? 'Route' : 'Way'
-
-    const summary: TrailSummary = {
-      id,
-      name,
-      type,
-      lengthKm,
-      difficulty,
-      website,
-    }
-
+    const summary = featureToTrailSummary(f)
+    if (!summary) { onSelect(null); return }
     onSelect(summary)
-
-    // Simple fly-to center of geometry at fixed zoom for all trails
-    try {
-      const coords = (f.geometry as any)?.coordinates?.flat(2) as number[] | undefined
-      if (Array.isArray(coords) && coords.length >= 2) {
-        const [minx, miny, maxx, maxy] = coords.reduce<[number, number, number, number]>((acc, c, idx) => {
-          if (idx % 2 === 0) { acc[0] = Math.min(acc[0], c); acc[2] = Math.max(acc[2], c) }
-          else { acc[1] = Math.min(acc[1], c); acc[3] = Math.max(acc[3], c) }
-          return acc
-        }, [Infinity, Infinity, -Infinity, -Infinity])
-        const cx = (minx + maxx) / 2
-        const cy = (miny + maxy) / 2
-        map.easeTo({ center: [cx, cy] as any, zoom: 10, duration: 800 })
-      }
-    } catch {}
+    flyToFeature(map, f, 8)
   })
 }
 

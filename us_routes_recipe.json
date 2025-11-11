@@ -1,26 +1,26 @@
 {
-    "version": 1,
-    "layers": {
-      "us_routes": {
-        "source": "mapbox://tileset-source/ultimateboss/us_routes_source_v1",
-        "minzoom": 0,
-        "maxzoom": 13,
-        "features": {
-          "attributes": {
-            "allowed_output": [
-              "osm_id",
-              "name",
-              "type",
-              "website",
-              "sac_scale",
-              "difficulty",
-              "surface",
-              "trail_visibility",
-              "length_m"
-            ]
-          }
+  "version": 1,
+  "layers": {
+    "us_routes": {
+      "source": "mapbox://tileset-source/ultimateboss/us_routes_source_v1",
+      "minzoom": 0,
+      "maxzoom": 13,
+      "features": {
+        "attributes": {
+          "allowed_output": [
+            "osm_id",
+            "name",
+            "type",
+            "region",
+            "website",
+            "sac_scale",
+            "difficulty",
+            "surface",
+            "trail_visibility",
+            "length_m"
+          ]
         }
       }
     }
   }
-  
+}
