@@ -2,7 +2,7 @@ import { MapView } from '@/components/map/MapView'
 
 function App() {
   return (
-    <div className="h-screen w-screen">
+    <div className="fixed inset-0 overflow-hidden">
       <MapView />
     </div>
   )

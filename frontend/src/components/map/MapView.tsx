@@ -371,13 +371,14 @@ export function MapView({ initialCenter = DEFAULT_INITIAL_CENTER, initialZoom = 
   }
 
   return (
-    <div className="relative h-screen w-screen bg-black">
+    <div className="relative h-full w-full bg-black">
       <div ref={containerRef} className="h-full w-full" />
 
       <Logo />
 
-      <div className="pointer-events-none absolute left-6 top-6 z-20 flex flex-col items-start gap-4">
-        <div className="pointer-events-auto inline-flex w-max">
+      <div className="pointer-events-none absolute left-6 top-6 bottom-6 z-20">
+        <div className="pointer-events-auto flex max-h-full flex-col items-start gap-4 overflow-y-auto pr-2">
+          <div className="inline-flex w-max">
           <TopBarControls
             isDarkStyle={styleUrl === DARK_STYLE}
             onToggleStyle={handleToggleStyle}
@@ -396,21 +397,22 @@ export function MapView({ initialCenter = DEFAULT_INITIAL_CENTER, initialZoom = 
             onChangeTerrain={setTerrainExaggeration}
             onResetTerrain={() => setTerrainExaggeration(1)}
           />
-        </div>
-        
-        <div className="pointer-events-auto inline-flex w-max">
-          <WaysLegend
-            isOpen={legendOpen}
-            onOpenChange={setLegendOpen}
-            buckets={legendSelections}
-            onToggleBucket={handleToggleLegendBucket}
-            onSelectAll={handleSelectAllBuckets}
-            onClearAll={handleClearBuckets}
-          />
-        </div>
+          </div>
 
-        <div className="pointer-events-auto inline-flex w-max">
-          <RegionTogglePanel visibility={regionVisibility} onToggle={handleToggleRegionVisibility} />
+          <div className="inline-flex w-max">
+            <WaysLegend
+              isOpen={legendOpen}
+              onOpenChange={setLegendOpen}
+              buckets={legendSelections}
+              onToggleBucket={handleToggleLegendBucket}
+              onSelectAll={handleSelectAllBuckets}
+              onClearAll={handleClearBuckets}
+            />
+          </div>
+
+          <div className="inline-flex w-max">
+            <RegionTogglePanel visibility={regionVisibility} onToggle={handleToggleRegionVisibility} />
+          </div>
         </div>
       </div>
 

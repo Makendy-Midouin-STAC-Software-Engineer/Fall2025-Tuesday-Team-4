@@ -9,7 +9,7 @@ interface FooterBarProps {
 
 export function FooterBar({ onOpenOverlay, onHitClick }: FooterBarProps) {
   return (
-    <div className="pointer-events-none absolute bottom-4 left-1/2 z-20 w-[min(100%,1000px)] -translate-x-1/2">
+    <div className="pointer-events-none absolute bottom-4 left-1/2 z-20 w-[min(1000px,calc(100vw-2rem))] -translate-x-1/2">
       <div className="pointer-events-auto glass rounded-3xl px-3.5 py-3 text-white shadow-lg backdrop-blur">
         <div className="flex flex-col gap-3">
           <SearchFilters />
