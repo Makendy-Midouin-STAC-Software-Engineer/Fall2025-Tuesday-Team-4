@@ -1,5 +1,5 @@
 import { InstantSearch, Configure } from 'react-instantsearch'
-import { PropsWithChildren } from 'react'
+import type { PropsWithChildren } from 'react'
 import { searchClient, indexName } from '@/lib/algoliaClient'
 
 export function AlgoliaProvider({ children }: PropsWithChildren) {
