@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Map as MapboxMap, LngLatLike, MapboxOptions } from 'mapbox-gl'
+import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 
 import { TopBarControls } from '@/components/overlay/TopBarControls'
@@ -32,16 +33,16 @@ import { normalizeTrailType } from '@/utils/trailType'
 
 const DEFAULT_INITIAL_CENTER: LngLatLike = [-99.5, 37.8]
 const DEFAULT_INITIAL_ZOOM = 2.08
-const DEFAULT_INITIAL_PITCH = 55
+const DEFAULT_INITIAL_PITCH = 0
 const DEFAULT_INITIAL_BEARING = 0
 const REGION_VISIBILITY_KEY = 'ihike:region-visibility'
 const DEFAULT_REGION_VISIBILITY: Record<RegionId, boolean> = {
-  northeast: true,
-  midwest: true,
-  south: true,
-  west: true,
-  alaska: true,
-  hawaii: true,
+  northeast: false,
+  midwest: false,
+  south: false,
+  west: false,
+  alaska: false,
+  hawaii: false,
 }
 
 interface MapViewProps {
@@ -54,6 +55,8 @@ export function MapView({ initialCenter = DEFAULT_INITIAL_CENTER, initialZoom = 
   const mapRef = useRef<MapboxMap | null>(null)
   const cleanupResizeRef = useRef<(() => void) | null>(null)
   const viewStateRef = useRef<ViewPreferences>({ style: DARK_STYLE, showRoutes: true, showWays: true })
+  const userMarkerRef = useRef<mapboxgl.Marker | null>(null)
+  const isMountedRef = useRef<boolean>(false)
 
   const [styleUrl, setStyleUrl] = useState<string>(() => initialStyleFromStorage(DARK_STYLE))
   const initialToggles = initialTogglesFromStorage(true, true)
@@ -76,6 +79,11 @@ export function MapView({ initialCenter = DEFAULT_INITIAL_CENTER, initialZoom = 
   useEffect(() => {
     safeStorageSet(REGION_VISIBILITY_KEY, regionVisibility)
   }, [regionVisibility])
+
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => { isMountedRef.current = false }
+  }, [])
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return
@@ -125,6 +133,8 @@ export function MapView({ initialCenter = DEFAULT_INITIAL_CENTER, initialZoom = 
       ensureSelectionHighlightLayers(map)
       wireClickSelection(map, (trail) => setSelectedTrail(trail))
       applyWaysLegendFilter(map, legendSelections, showWays)
+      // Request geolocation on load
+      try { locateAndFly() } catch {}
       persist()
     })
 
@@ -144,10 +154,42 @@ export function MapView({ initialCenter = DEFAULT_INITIAL_CENTER, initialZoom = 
       map.off('zoom', handleZoom)
       map.off('zoomend', handleZoom)
       try { cleanupResizeRef.current?.() } catch {}
+      try { userMarkerRef.current?.remove(); userMarkerRef.current = null } catch {}
       map.remove()
       mapRef.current = null
     }
   }, [])
+
+  function locateAndFly() {
+    if (!mapRef.current) return
+    if (!('geolocation' in navigator)) return
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        if (!isMountedRef.current) return
+        const map = mapRef.current
+        if (!map) return
+        const lng = position.coords.longitude
+        const lat = position.coords.latitude
+        try {
+          if (!userMarkerRef.current) {
+            userMarkerRef.current = new mapboxgl.Marker({ color: '#22c55e' }).setLngLat([lng, lat]).addTo(map)
+          } else {
+            userMarkerRef.current.setLngLat([lng, lat])
+          }
+        } catch {}
+        try {
+          const currentZoom = map.getZoom()
+          const targetZoom = currentZoom >= 10 ? currentZoom : 10
+          map.flyTo({ center: [lng, lat] as any, zoom: targetZoom, duration: 1000, essential: true })
+        } catch {}
+      },
+      () => {
+        if (!isMountedRef.current) return
+        // Ignored: user denied or error; button remains available to retry
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    )
+  }
 
   useEffect(() => {
     viewStateRef.current = { style: styleUrl, showRoutes, showWays }
@@ -255,6 +297,21 @@ export function MapView({ initialCenter = DEFAULT_INITIAL_CENTER, initialZoom = 
     setWidthScale(1)
     setAffectRoutes(true)
     setAffectWays(true)
+  }
+
+  function handleResetView() {
+    const map = mapRef.current
+    if (!map) return
+    try {
+      map.flyTo({
+        center: initialCenter as any,
+        zoom: initialZoom,
+        bearing: DEFAULT_INITIAL_BEARING,
+        pitch: DEFAULT_INITIAL_PITCH,
+        duration: 1000,
+        essential: true,
+      })
+    } catch {}
   }
 
   function handleToggleLegendBucket(index: number) {
@@ -386,6 +443,8 @@ export function MapView({ initialCenter = DEFAULT_INITIAL_CENTER, initialZoom = 
             showWays={showWays}
             onToggleRoutes={() => setShowRoutes((value) => !value)}
             onToggleWays={() => setShowWays((value) => !value)}
+            onLocate={() => locateAndFly()}
+            onResetView={handleResetView}
             widthScale={widthScale}
             onChangeWidth={setWidthScale}
             affectRoutes={affectRoutes}

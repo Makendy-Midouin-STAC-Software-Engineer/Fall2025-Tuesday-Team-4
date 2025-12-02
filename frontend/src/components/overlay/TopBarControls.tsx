@@ -6,6 +6,8 @@ interface TopBarControlsProps {
   showWays: boolean
   onToggleRoutes: () => void
   onToggleWays: () => void
+  onLocate?: () => void
+  onResetView: () => void
   widthScale: number
   onChangeWidth: (value: number) => void
   affectRoutes: boolean
@@ -25,6 +27,8 @@ export function TopBarControls({
   showWays,
   onToggleRoutes,
   onToggleWays,
+  onLocate,
+  onResetView,
   widthScale,
   onChangeWidth,
   affectRoutes,
@@ -49,6 +53,8 @@ export function TopBarControls({
         <div className="flex gap-3">
           <ToggleButton label="Routes" isActive={showRoutes} onToggle={onToggleRoutes} />
           <ToggleButton label="Ways" isActive={showWays} onToggle={onToggleWays} />
+          {onLocate ? <ToggleButton label="My Location" isActive={true} onToggle={onLocate} /> : null}
+          <ToggleButton label="Reset" isActive={true} onToggle={onResetView} />
         </div>
       </div>
 
