@@ -17,7 +17,7 @@ export function SearchOverlay({ open, onClose, onHitClick }: SearchOverlayProps)
       className={`pointer-events-auto fixed inset-0 z-40 flex items-start justify-center bg-black/60 backdrop-blur-sm transition-opacity ${open ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
       aria-hidden={!open}
     >
-      <div className={`mt-20 w-[min(100%,1000px)] rounded-2xl bg-zinc-900/95 p-6 text-white shadow-2xl ring-1 ring-white/10 transition-transform ${open ? 'translate-y-0' : '-translate-y-4'}`}>
+      <div className={`mt-20 w-[min(100%,1000px)] rounded-2xl bg-zinc-900/95 p-6 text-white shadow-2xl ring-1 ring-white/10 transition-transform font-jersey ${open ? 'translate-y-0' : '-translate-y-4'}`}>
         <div className="relative">
           <button
             onClick={onClose}
