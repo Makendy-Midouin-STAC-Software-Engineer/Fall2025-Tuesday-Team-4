@@ -56,6 +56,7 @@ export function MapView({ initialCenter = DEFAULT_INITIAL_CENTER, initialZoom = 
   const cleanupResizeRef = useRef<(() => void) | null>(null)
   const viewStateRef = useRef<ViewPreferences>({ style: DARK_STYLE, showRoutes: true, showWays: true })
   const userMarkerRef = useRef<mapboxgl.Marker | null>(null)
+  const isMountedRef = useRef<boolean>(false)
 
   const [styleUrl, setStyleUrl] = useState<string>(() => initialStyleFromStorage(DARK_STYLE))
   const initialToggles = initialTogglesFromStorage(true, true)
@@ -78,6 +79,11 @@ export function MapView({ initialCenter = DEFAULT_INITIAL_CENTER, initialZoom = 
   useEffect(() => {
     safeStorageSet(REGION_VISIBILITY_KEY, regionVisibility)
   }, [regionVisibility])
+
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => { isMountedRef.current = false }
+  }, [])
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return
@@ -155,11 +161,13 @@ export function MapView({ initialCenter = DEFAULT_INITIAL_CENTER, initialZoom = 
   }, [])
 
   function locateAndFly() {
-    const map = mapRef.current
-    if (!map) return
+    if (!mapRef.current) return
     if (!('geolocation' in navigator)) return
     navigator.geolocation.getCurrentPosition(
       (position) => {
+        if (!isMountedRef.current) return
+        const map = mapRef.current
+        if (!map) return
         const lng = position.coords.longitude
         const lat = position.coords.latitude
         try {
@@ -176,6 +184,7 @@ export function MapView({ initialCenter = DEFAULT_INITIAL_CENTER, initialZoom = 
         } catch {}
       },
       () => {
+        if (!isMountedRef.current) return
         // Ignored: user denied or error; button remains available to retry
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
