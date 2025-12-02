@@ -70,9 +70,10 @@ export function MapView({ initialCenter = DEFAULT_INITIAL_CENTER, initialZoom = 
   const [selectedTrail, setSelectedTrail] = useState<TrailSummary | null>(null)
   const [zoomLevel, setZoomLevel] = useState<number>(initialZoom)
   const [searchOpen, setSearchOpen] = useState<boolean>(false)
-  const [regionVisibility, setRegionVisibilityState] = useState<Record<RegionId, boolean>>(
-    () => DEFAULT_REGION_VISIBILITY
-  )
+  const [regionVisibility, setRegionVisibilityState] = useState<Record<RegionId, boolean>>(() => {
+    const stored = safeStorageGet<Record<RegionId, boolean>>(REGION_VISIBILITY_KEY)
+    return stored ? { ...DEFAULT_REGION_VISIBILITY, ...stored } : DEFAULT_REGION_VISIBILITY
+  })
 
   useEffect(() => {
     safeStorageSet(REGION_VISIBILITY_KEY, regionVisibility)
@@ -477,6 +478,15 @@ export function MapView({ initialCenter = DEFAULT_INITIAL_CENTER, initialZoom = 
       </div>
     </div>
   )
+}
+
+function safeStorageGet<T = unknown>(key: string): T | null {
+  try {
+    const raw = localStorage.getItem(key)
+    return raw ? (JSON.parse(raw) as T) : null
+  } catch {
+    return null
+  }
 }
 
 function safeStorageSet(key: string, value: unknown) {
