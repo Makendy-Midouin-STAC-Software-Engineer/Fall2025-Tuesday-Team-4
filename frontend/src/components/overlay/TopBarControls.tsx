@@ -54,7 +54,7 @@ export function TopBarControls({
           <ToggleButton label="Routes" isActive={showRoutes} onToggle={onToggleRoutes} />
           <ToggleButton label="Ways" isActive={showWays} onToggle={onToggleWays} />
           {onLocate ? <ToggleButton label="My Location" isActive={true} onToggle={onLocate} /> : null}
-          <ToggleButton label="Reset" isActive={false} onToggle={onResetView} />
+          <ToggleButton label="Reset" isActive={true} onToggle={onResetView} />
         </div>
       </div>
 
